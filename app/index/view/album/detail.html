@@ -1,0 +1,127 @@
+{extend name="layout"}
+{block name="title"}{$album.title} - 图站{/block}
+{block name="description"}{$album.subtitle|default=$album.title}{/block}
+{block name="content"}
+<div class="max-w-5xl mx-auto px-4 py-8">
+    <nav class="text-xs text-[#86868b] mb-4">
+        <a href="/" class="hover:text-[#0071e3]">首页</a>
+        {notempty name="album.category"}
+        <span> / <a href="/category/{$album.category_slug}" class="hover:text-[#0071e3]">{$album.category}</a></span>
+        {/notempty}
+        <span> / {$album.title}</span>
+    </nav>
+
+    <div class="flex flex-wrap items-start justify-between gap-3">
+        <div>
+            <h1 class="text-2xl md:text-3xl font-semibold tracking-tight">{$album.title}</h1>
+            {notempty name="album.subtitle"}<p class="text-[#6e6e73] mt-1">{$album.subtitle}</p>{/notempty}
+        </div>
+        <button data-fav data-id="{$album.id}" onclick="toggleFavorite({$album.id}, this)"
+                class="px-4 py-1.5 rounded-full border text-sm transition {if condition='$favorited'}border-[#0071e3] text-[#0071e3] hover:opacity-80{else /}border-[#d2d2d7] text-[#86868b] hover:border-[#0071e3] hover:text-[#0071e3]{/if}">
+            {if condition='$favorited'}已收藏{else /}收藏{/if}
+        </button>
+    </div>
+
+    <div class="flex flex-wrap items-center gap-x-4 gap-y-1 mt-3 text-sm text-[#86868b]">
+        <span>{$album.view_count} 浏览</span>
+        <span>{$album.like_count} 赞</span>
+        <span>等级 L{$album.level}</span>
+        {volist name="album.tags" id="t"}
+        <a href="/tag/{$t.slug}" class="text-[#0071e3] hover:underline">#{$t.name}</a>
+        {/volist}
+    </div>
+
+    {if condition="$album.type eq 'video'"}
+    <div class="mt-6">
+        <div class="video-wrap rounded-xl overflow-hidden bg-black shadow-lg">
+            <video id="player" playsinline controls
+                {notempty name="album.video.poster"}data-poster="{$album.video.poster}"{/notempty}>
+                <source src="{$album.video.url}" type="video/mp4">
+            </video>
+        </div>
+        {notempty name="album.video.duration"}<p class="text-xs text-[#86868b] mt-2">时长 {$album.video.duration} 秒</p>{/notempty}
+    </div>
+    {else /}
+    <div class="mt-6" x-data="lightbox()" @keydown.escape.window="close()" @keydown.left.window="prev()" @keydown.right.window="next()">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {volist name="album.images" id="img" key="i"}
+            <img src="{$img.webp}" data-lb="{$img.webp}" alt="{$album.title}" loading="lazy"
+                 @click="open($el.dataset.lb)"
+                 class="w-full rounded-lg cursor-zoom-in bg-black/5 {if condition='$i > 1'}hidden md:block{/if}">
+            {/volist}
+        </div>
+
+        <!-- 灯箱 -->
+        <div x-show="active" x-cloak class="lightbox" @click.self="close()">
+            <button class="lightbox-close" @click="close()" aria-label="关闭">×</button>
+            <button class="lightbox-btn" style="left:16px" @click="prev()" aria-label="上一张">‹</button>
+            <img :src="active" alt="{$album.title}">
+            <button class="lightbox-btn" style="right:16px" @click="next()" aria-label="下一张">›</button>
+        </div>
+    </div>
+    {/if}
+
+    <!-- 评论区 -->
+    <div class="mt-10 border-t border-black/5 dark:border-white/10 pt-8">
+        <h2 class="text-lg font-semibold mb-5">评论（{$comments.total}）</h2>
+        <form x-data="commentForm({$album.id})" @submit.prevent="submit" class="mb-8">
+            <textarea x-model="form.content" rows="3" placeholder="写下你的评论…"
+                      class="w-full border border-[#d2d2d7] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#0071e3] dark:bg-[#1d1d1f] dark:border-[#48484a]"></textarea>
+            <div class="flex items-center justify-end gap-3 mt-2">
+                <p x-show="msg" x-text="msg" class="text-sm text-red-500 mr-auto"></p>
+                <button type="submit" :disabled="loading"
+                        class="px-5 py-2 rounded-lg bg-[#0071e3] text-white text-sm hover:opacity-90 disabled:opacity-50 transition">发表评论</button>
+            </div>
+        </form>
+        <div class="space-y-5">
+            {volist name="comments.items" id="c"}
+            <div class="flex gap-3">
+                <div class="w-8 h-8 rounded-full bg-[#0071e3]/10 text-[#0071e3] flex items-center justify-center text-xs font-semibold shrink-0">{:mb_substr($c.user.username, 0, 1)}</div>
+                <div class="min-w-0">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <span class="text-sm font-medium">{$c.user.username}</span>
+                        <span class="text-xs text-[#86868b]">{$c.create_time}</span>
+                    </div>
+                    <p class="text-sm mt-1 break-words text-[#3a3a3c] dark:text-[#d2d2d7]">{$c.content}</p>
+                </div>
+            </div>
+            {/volist}
+            {empty name="comments.items"}
+            <p class="text-sm text-[#86868b] py-2">暂无评论，来抢沙发</p>
+            {/empty}
+        </div>
+    </div>
+</div>
+{/block}
+{block name="scripts"}
+<script>
+function commentForm(albumId) {
+    return {
+        form: { album_id: albumId, content: '' },
+        loading: false,
+        msg: '',
+        async submit() {
+            this.loading = true;
+            this.msg = '';
+            try {
+                const res = await fetch('/api/comment/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(this.form),
+                });
+                const data = await res.json();
+                if (data.code !== 0) {
+                    this.msg = data.message || '评论失败';
+                } else {
+                    location.reload();
+                }
+            } catch (err) {
+                this.msg = '网络错误，请稍后重试';
+            } finally {
+                this.loading = false;
+            }
+        },
+    };
+}
+</script>
+{/block}

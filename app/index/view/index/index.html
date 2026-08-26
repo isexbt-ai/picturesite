@@ -1,0 +1,32 @@
+{extend name="layout"}
+{block name="title"}图站 - 高清图片与视频{/block}
+{block name="description"}高清图片图集、单图与视频内容浏览{/block}
+{block name="content"}
+<div class="max-w-7xl mx-auto px-4 py-8">
+    <h1 class="text-2xl font-semibold tracking-tight mb-6">最新内容</h1>
+
+    {empty name="list.items"}
+    <div class="text-center text-[#86868b] py-20">暂无内容，敬请期待</div>
+    {else /}
+    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
+        {volist name="list.items" id="item"}
+        <a href="/album/{$item.id}" class="group block">
+            <div class="card-cover relative aspect-[3/4] overflow-hidden rounded-xl bg-black/5">
+                <img src="{$item.cover}" alt="{$item.title}" loading="lazy" class="w-full h-full object-cover">
+                <span class="type-badge">{$item.type_label}</span>
+                {if condition="$item.level > 0"}<span class="type-badge" style="left:auto;right:10px">L{$item.level}</span>{/if}
+            </div>
+            <h3 class="mt-2 text-sm font-medium line-clamp-1 group-hover:text-[#0071e3]">{$item.title}</h3>
+            <p class="text-xs text-[#86868b] mt-0.5">{$item.view_count} 浏览 · {$item.like_count} 赞</p>
+        </a>
+        {/volist}
+    </div>
+    {/empty}
+
+    {if condition="$list.has_more"}
+    <div class="text-center mt-10">
+        <a href="/?page={$list.page+1}" class="px-6 py-2.5 rounded-full bg-[#0071e3] text-white text-sm hover:opacity-90 transition">加载更多</a>
+    </div>
+    {/if}
+</div>
+{/block}

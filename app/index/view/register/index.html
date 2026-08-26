@@ -1,0 +1,31 @@
+{extend name="layout"}
+{block name="title"}注册 - 图站{/block}
+{block name="content"}
+<div class="max-w-sm mx-auto px-4 py-16">
+    <div class="bg-white rounded-2xl p-8 shadow-sm border border-black/5">
+        <h1 class="text-2xl font-semibold text-center">注册</h1>
+        <p class="text-center text-sm text-[#86868b] mt-1">需要邀请码才能注册</p>
+        <form x-data="authForm('/api/auth/register', '/')" @submit.prevent="submit" class="mt-6 space-y-4">
+            <div>
+                <label for="username" class="block text-sm mb-1">用户名</label>
+                <input id="username" type="text" x-model="form.username" required autocomplete="username"
+                       class="w-full border border-[#d2d2d7] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#0071e3]">
+            </div>
+            <div>
+                <label for="password" class="block text-sm mb-1">密码</label>
+                <input id="password" type="password" x-model="form.password" required minlength="6" autocomplete="new-password"
+                       class="w-full border border-[#d2d2d7] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#0071e3]">
+            </div>
+            <div>
+                <label for="invite" class="block text-sm mb-1">邀请码</label>
+                <input id="invite" type="text" x-model="form.invite_code" required autocomplete="off"
+                       class="w-full border border-[#d2d2d7] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#0071e3]">
+            </div>
+            <p x-show="error" x-text="error" class="text-sm text-red-500"></p>
+            <button type="submit" :disabled="loading"
+                    class="w-full py-2.5 rounded-lg bg-[#0071e3] text-white text-sm hover:opacity-90 disabled:opacity-50 transition">注册</button>
+        </form>
+        <p class="text-center text-sm mt-4 text-[#86868b]">已有账号？<a href="/login" class="text-[#0071e3]">登录</a></p>
+    </div>
+</div>
+{/block}

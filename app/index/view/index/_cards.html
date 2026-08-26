@@ -1,0 +1,17 @@
+{empty name="list.items"}
+<div class="text-center text-[#86868b] py-20">暂无内容</div>
+{else /}
+<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
+    {volist name="list.items" id="item"}
+    <a href="/album/{$item.id}" class="group block">
+        <div class="card-cover relative aspect-[3/4] overflow-hidden rounded-xl bg-black/5">
+            <img src="{$item.cover}" alt="{$item.title}" loading="lazy" class="w-full h-full object-cover">
+            <span class="type-badge">{$item.type_label}</span>
+            {if condition="$item.level > 0"}<span class="type-badge" style="left:auto;right:10px">L{$item.level}</span>{/if}
+        </div>
+        <h3 class="mt-2 text-sm font-medium line-clamp-1 group-hover:text-[#0071e3]">{$item.title}</h3>
+        <p class="text-xs text-[#86868b] mt-0.5">{$item.view_count} 浏览 · {$item.like_count} 赞</p>
+    </a>
+    {/volist}
+</div>
+{/empty}
