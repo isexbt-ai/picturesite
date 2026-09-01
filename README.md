@@ -1,77 +1,75 @@
-![](https://www.thinkphp.cn/uploads/images/20230630/300c856765af4d8ae758c503185f8739.png)
+# 图站
 
-ThinkPHP 8
-===============
+图片 + 视频展示网站。支持图集 / 单图 / 视频三种内容形态，整站登录墙 + 内容分级（L0–L3）+ VIP 付费解锁（卡密兑换 / 手动发放），视频直传 MP4 走 CDN。
 
-## 特性
+## 功能特性
 
-* 基于PHP`8.0+`重构
-* 升级`PSR`依赖
-* 依赖`think-orm`3.0+版本
-* 全新的`think-dumper`服务，支持远程调试
-* 支持`6.0`/`6.1`无缝升级
+- **三种内容形态**：图集、单图、视频（复用一张内容表）
+- **内容分级**：L0–L3 可见等级，在 Service 层强制校验（非仅前端隐藏）
+- **VIP 体系**：卡密批次 / 卡密兑换 / 手动发放，到期自动降级
+- **整站登录墙**：邀请码注册 + 登录，前台 SSR 利于 SEO
+- **对象存储**：本地文件系统（开发）/ Cloudflare R2（生产）双驱动
+- **管理后台**：内容管理、分类标签、卡密、VIP、邀请码、用户、评论审核、系统设置
 
-> ThinkPHP8的运行环境要求PHP8.0+
+## 技术栈
 
-现在开始，你可以使用官方提供的[ThinkChat](https://chat.topthink.com/)，让你在学习ThinkPHP的旅途中享受私人AI助理服务！
+| 层 | 技术 |
+|---|---|
+| 后端 | PHP 8.0+（生产 8.4）· ThinkPHP 8 · MySQL 8 · Redis |
+| 前台 | TP 模板 · Tailwind · Alpine.js · Plyr（视频） |
+| 后台 | Vue 3 · Element Plus · Vite · TypeScript |
+| 存储 | Cloudflare R2（AWS SDK for PHP） |
 
-![](https://www.topthink.com/uploads/assistant/20230630/4d1a3f0ad2958b49bb8189b7ef824cb0.png)
+## 目录结构
 
-ThinkPHP生态服务由[顶想云](https://www.topthink.com)（TOPThink Cloud）提供，为生态提供专业的开发者服务和价值之选。
+```
+app/
+  index/   前台（SSR）
+  api/     前台 JSON 接口
+  admin/   后台 API
+  common/  Model / Service / Middleware / 公共命令
+admin-web/  后台前端（Vue 3，构建产物输出到 public/admin/）
+config/     框架配置（app_map / storage / r2 等）
+database/   迁移（migrations）
+docs/       代码规范、部署指南
+public/     入口 + 静态资源 + 后台构建产物
+```
 
-## 文档
+## 本地开发
 
-[完全开发手册](https://doc.thinkphp.cn)
+```bash
+# 1. 安装依赖
+composer install
 
+# 2. 配置环境（复制模板改数据库等）
+cp .example.env .env
 
-## 赞助
+# 3. 建表 + 创建管理员
+php think migrate:run
+php think admin:create --user=admin --password=你的密码
 
-全新的[赞助计划](https://www.thinkphp.cn/sponsor)可以让你通过我们的网站、手册、欢迎页及GIT仓库获得巨大曝光，同时提升企业的品牌声誉，也更好保障ThinkPHP的可持续发展。
-
-[![](https://www.thinkphp.cn/sponsor/special.svg)](https://www.thinkphp.cn/sponsor/special)
-
-[![](https://www.thinkphp.cn/sponsor.svg)](https://www.thinkphp.cn/sponsor)
-
-## 安装
-
-~~~
-composer create-project topthink/think tp
-~~~
-
-启动服务
-
-~~~
-cd tp
+# 4. 启动开发服务器
 php think run
-~~~
+```
 
-然后就可以在浏览器中访问
+访问：前台 `http://localhost:8000/`，后台 `http://localhost:8000/admin/`（接口 `/admin-api/`）。
 
-~~~
-http://localhost:8000
-~~~
+后台前端改动需在 `admin-web/` 下构建：
 
-如果需要更新框架使用
-~~~
-composer update topthink/framework
-~~~
+```bash
+cd admin-web
+npm install
+npm run build   # 产物输出到 public/admin/
+```
 
-## 命名规范
+## 生产部署
 
-`ThinkPHP`遵循PSR-2命名规范和PSR-4自动加载规范。
+完整步骤（1Panel + Nginx + R2 + 配置文件修改清单）见 [docs/部署指南.md](docs/部署指南.md)。
 
-## 参与开发
+## 开发规范
 
-直接提交PR或者Issue即可
+遵循 [docs/代码规范.md](docs/代码规范.md)：分层 Controller → Service → Model，业务逻辑只放 Service，全类型声明，内容分级在 Service 层强制校验，用户输入经验证器校验。
 
-## 版权信息
+## 许可
 
-ThinkPHP遵循Apache2开源协议发布，并提供免费使用。
-
-本项目包含的第三方源码和二进制文件之版权信息另行标注。
-
-版权所有Copyright © 2006-2024 by ThinkPHP (http://thinkphp.cn) All rights reserved。
-
-ThinkPHP® 商标和著作权所有者为上海顶想信息科技有限公司。
-
-更多细节参阅 [LICENSE.txt](LICENSE.txt)
+基于 ThinkPHP 8（Apache 2.0），项目自有代码版权归作者所有。
