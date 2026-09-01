@@ -1,0 +1,1 @@
+function e(e){return e?/^https?:\/\//.test(e)?e:`${`https://picture.xxxxxxxxxxxxxxxxxxxx.xyz`.replace(/\/$/,``)}/${e}`:``}export{e as t};

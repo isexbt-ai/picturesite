@@ -1,1 +1,0 @@
-function e(e){return e?/^https?:\/\//.test(e)?e:`${`/storage`.replace(/\/$/,``)}/${e}`:``}export{e as t};
