@@ -42,13 +42,33 @@
         {notempty name="album.video.duration"}<p class="text-xs text-[#86868b] mt-2">时长 {$album.video.duration} 秒</p>{/notempty}
     </div>
     {else /}
-    <div class="mt-6" x-data="lightbox()" @keydown.escape.window="close()" @keydown.left.window="prev()" @keydown.right.window="next()">
+    <script type="application/json" id="album-images">{$imagesJSON|raw}</script>
+    <div class="mt-6" x-data="imageViewer()" @keydown.escape.window="close()" @keydown.left.window="prev()" @keydown.right.window="next()">
+        <!-- 图片大小切换 -->
+        <div class="flex items-center gap-2 mb-4" x-show="images.length > 0">
+            <span class="text-xs text-[#86868b]">图片大小</span>
+            <template x-for="opt in sizes" :key="opt.key">
+                <button type="button" @click="setSize(opt.key)"
+                        :class="size === opt.key
+                            ? 'px-3 py-1 text-xs rounded-full bg-[#0071e3] text-white transition'
+                            : 'px-3 py-1 text-xs rounded-full border border-[#d2d2d7] text-[#6e6e73] hover:border-[#0071e3] hover:text-[#0071e3] transition'">
+                    <span x-text="opt.label"></span>
+                </button>
+            </template>
+            <span class="text-xs text-[#86868b] ml-1" x-text="sizeLabel"></span>
+        </div>
+
+        <!-- 图片网格 -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {volist name="album.images" id="img" key="i"}
-            <img src="{$img.webp}" data-lb="{$img.webp}" alt="{$album.title}" loading="lazy"
-                 @click="open($el.dataset.lb)"
-                 class="w-full rounded-lg cursor-zoom-in bg-black/5 {if condition='$i > 1'}hidden md:block{/if}">
-            {/volist}
+            <template x-for="(img, i) in images" :key="i">
+                <img :src="img[size]" loading="lazy" alt="{$album.title}"
+                     @click="open(i)"
+                     :class="i > 1 ? 'hidden md:block' : ''"
+                     class="w-full rounded-lg cursor-zoom-in bg-black/5">
+            </template>
+            <template x-if="images.length === 0">
+                <p class="text-sm text-[#86868b] py-4">暂无图片</p>
+            </template>
         </div>
 
         <!-- 灯箱 -->
@@ -57,6 +77,7 @@
             <button class="lightbox-btn" style="left:16px" @click="prev()" aria-label="上一张">‹</button>
             <img :src="active" alt="{$album.title}">
             <button class="lightbox-btn" style="right:16px" @click="next()" aria-label="下一张">›</button>
+            <p class="lightbox-hint" x-text="sizeLabel"></p>
         </div>
     </div>
     {/if}
@@ -95,6 +116,64 @@
 {/block}
 {block name="scripts"}
 <script>
+function imageViewer() {
+    return {
+        images: [],
+        size: 'webp',
+        sizes: [
+            { key: 'thumb', label: '小图' },
+            { key: 'webp', label: '中图' },
+            { key: 'url', label: '大图（原图）' },
+        ],
+        active: '',
+        activeIdx: 0,
+        get sizeLabel() {
+            const opt = this.sizes.find((s) => s.key === this.size);
+            return opt ? opt.label : '';
+        },
+        init() {
+            try {
+                const el = document.getElementById('album-images');
+                if (el) {
+                    this.images = JSON.parse(el.textContent || '[]');
+                }
+                const saved = localStorage.getItem('imgSize');
+                if (saved && this.sizes.some((s) => s.key === saved)) {
+                    this.size = saved;
+                }
+            } catch (err) {
+                this.images = [];
+            }
+        },
+        setSize(key) {
+            this.size = key;
+            try { localStorage.setItem('imgSize', key); } catch (err) {}
+            if (this.active) {
+                this.active = this.images[this.activeIdx]?.[key] || '';
+            }
+        },
+        open(i) {
+            this.activeIdx = i;
+            this.active = this.images[i]?.[this.size] || '';
+            document.body.style.overflow = 'hidden';
+        },
+        close() {
+            this.active = '';
+            document.body.style.overflow = '';
+        },
+        prev() {
+            if (!this.images.length) return;
+            this.activeIdx = (this.activeIdx - 1 + this.images.length) % this.images.length;
+            this.active = this.images[this.activeIdx][this.size];
+        },
+        next() {
+            if (!this.images.length) return;
+            this.activeIdx = (this.activeIdx + 1) % this.images.length;
+            this.active = this.images[this.activeIdx][this.size];
+        },
+    };
+}
+
 function commentForm(albumId) {
     return {
         form: { album_id: albumId, content: '' },

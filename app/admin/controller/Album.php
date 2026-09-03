@@ -90,6 +90,8 @@ class Album extends BaseController
             'subtitle'    => (string) ($data['subtitle'] ?? ''),
             'type'        => $type,
             'cover'       => (string) ($data['cover'] ?? ''),
+            'cover_thumb' => (string) ($data['cover_thumb'] ?? ''),
+            'cover_webp'  => (string) ($data['cover_webp'] ?? ''),
             'level'       => min(3, max(0, (int) ($data['level'] ?? 0))),
             'category_id' => (int) ($data['category_id'] ?? 0),
             'status'      => (int) ($data['status'] ?? AlbumModel::STATUS_DRAFT),
@@ -138,7 +140,12 @@ class Album extends BaseController
             throw new BizException('内容不存在', 1601);
         }
 
-        // 清理存储文件
+        // 清理存储文件（封面三尺寸 + 图集图片 + 视频）
+        $this->deleteMediaKeys([
+            (string) $album->cover,
+            (string) ($album->cover_thumb ?? ''),
+            (string) ($album->cover_webp ?? ''),
+        ]);
         foreach ($album->images()->select() as $img) {
             $this->deleteMediaKeys([$img->path, $img->thumb_path, $img->webp_path]);
         }
@@ -160,12 +167,36 @@ class Album extends BaseController
     }
 
     /**
-     * 同步图集图片
+     * 同步图集图片（差集清理孤儿文件）
      *
      * @param array $images [{path, thumb_path, webp_path, width, height, size, sort}]
      */
     private function syncImages(AlbumModel $album, array $images): void
     {
+        // 收集旧图集所有 key
+        $oldKeys = [];
+        foreach (ImageModel::where('album_id', (int) $album->id)->select() as $old) {
+            foreach ([(string) $old->path, (string) ($old->thumb_path ?? ''), (string) ($old->webp_path ?? '')] as $k) {
+                if ($k !== '') {
+                    $oldKeys[$k] = true;
+                }
+            }
+        }
+
+        // 收集新图集所有 key
+        $newKeys = [];
+        foreach ($images as $img) {
+            foreach ([(string) ($img['path'] ?? ''), (string) ($img['thumb_path'] ?? ''), (string) ($img['webp_path'] ?? '')] as $k) {
+                if ($k !== '') {
+                    $newKeys[$k] = true;
+                }
+            }
+        }
+
+        // 孤儿 = 旧中存在但新中不再引用的 key
+        $orphanKeys = array_keys(array_diff_key($oldKeys, $newKeys));
+
+        // 删除记录并重建
         ImageModel::where('album_id', (int) $album->id)->delete();
         $sort = 0;
         foreach ($images as $img) {
@@ -184,6 +215,9 @@ class Album extends BaseController
                 'size'       => (int) ($img['size'] ?? 0),
             ]);
         }
+
+        // 清理被替换/移除的孤儿文件
+        $this->deleteMediaKeys($orphanKeys);
     }
 
     /**

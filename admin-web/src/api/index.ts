@@ -23,6 +23,8 @@ export interface AlbumItem {
   subtitle: string
   type: 'album' | 'single' | 'video'
   cover: string
+  cover_thumb?: string
+  cover_webp?: string
   level: number
   category_id: number
   status: number

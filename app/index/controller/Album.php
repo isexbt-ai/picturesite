@@ -31,9 +31,11 @@ class Album extends BaseController
         ContentService::incrementView($album);
         \app\common\service\BrowseLogService::record($user, (int) $album->id);
 
+        $payload = ContentService::detailPayload($album);
         return view('album/detail', [
             'user'       => $user,
-            'album'      => ContentService::detailPayload($album),
+            'album'      => $payload,
+            'imagesJSON' => json_encode($payload['images'] ?? [], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
             'favorited'  => \app\common\service\FavoriteService::hasFavorited($user, (int) $album->id),
             'comments'   => \app\common\service\CommentService::list((int) $album->id, 1, 20),
             'categories' => Category::where('status', Category::STATUS_ENABLED)->order('sort asc, id asc')->select(),
