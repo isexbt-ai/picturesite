@@ -84,10 +84,20 @@ const page = ref(1)
 const keyword = ref('')
 const loading = ref(false)
 
+interface UserForm {
+  id: number
+  username: string
+  password: string
+  email: string
+  vip_level: number
+  status: number
+  vip_expire_at: string | null
+}
+
 const dialogVisible = ref(false)
 const saving = ref(false)
 const formRef = ref<FormInstance>()
-const form = reactive<UserPayload>({
+const form = reactive<UserForm>({
   id: 0,
   username: '',
   password: '',
