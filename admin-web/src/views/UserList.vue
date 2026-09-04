@@ -75,7 +75,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { FormInstance } from 'element-plus'
-import type { UserItem, UserPayload } from '../api'
+import type { UserItem } from '../api'
 import { deleteUser, getUsers, saveUser } from '../api'
 
 const list = ref<UserItem[]>([])
