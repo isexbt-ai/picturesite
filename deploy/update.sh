@@ -48,11 +48,7 @@ if [ -z "${PHP_BIN:-}" ]; then
         done
         if [ -n "$PHP_CID" ]; then
             PHP_BIN="docker exec $PHP_CID php"
-        else
-            PHP_BIN="php"   # fallback，让后续步骤报错时给清晰提示
         fi
-    else
-        PHP_BIN="php"
     fi
 fi
 
@@ -64,10 +60,10 @@ blue()   { printf '\033[34m%s\033[0m\n' "$*"; }
 # === 前置检查 ===
 [ -d .git ] || { red "当前目录不是 git 仓库，请在站点根目录执行"; exit 1; }
 command -v git >/dev/null || { red "未找到 git"; exit 1; }
-{ [ "${PHP_BIN%% *}" = "docker" ] && command -v docker >/dev/null; } || command -v "${PHP_BIN%% *}" >/dev/null 2>&1 || {
-    red "未找到 PHP 可执行（$PHP_BIN），请安装或通过 PHP_BIN=<docker exec X php> 指定"
+if [ -z "${PHP_BIN:-}" ]; then
+    red "未找到 PHP 可执行：请安装宿主机 php，或通过 PHP_BIN=\"docker exec <图站容器> php\" 指定"
     exit 1
-}
+fi
 
 # === 1. 拉取代码 ===
 blue "[1/5] 拉取远程代码 ${REMOTE}/${BRANCH} ..."
