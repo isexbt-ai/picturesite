@@ -8,7 +8,6 @@ use app\common\exception\BizException;
 use app\common\middleware\AuthWall;
 use app\common\model\Album as AlbumModel;
 use app\common\model\Category;
-use app\common\service\ContentAccessService;
 use app\common\service\ContentService;
 use think\response\View;
 
@@ -26,12 +25,14 @@ class Album extends BaseController
         if (!$album) {
             throw new BizException('内容不存在', 1021);
         }
-        // 分级校验（未发布 / 等级不足 / 未登录 均拒绝）
-        ContentAccessService::assertAccess($user, $album);
+        // 仅校验已发布；分级校验由 detailPayload 内部裁剪媒体 URL 实现（不抛异常，保证低等级也能进入详情页看到封面+提示）
+        if ((int) $album->status !== \app\common\model\Album::STATUS_PUBLISHED) {
+            throw new BizException('内容不存在或未发布', 1021);
+        }
         ContentService::incrementView($album);
         \app\common\service\BrowseLogService::record($user, (int) $album->id);
 
-        $payload = ContentService::detailPayload($album);
+        $payload = ContentService::detailPayload($album, $user);
         return view('album/detail', [
             'user'       => $user,
             'album'      => $payload,

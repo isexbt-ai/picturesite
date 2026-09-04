@@ -31,6 +31,23 @@
         {/volist}
     </div>
 
+    {if condition="$album.locked"}
+    <div class="mt-6 relative rounded-xl overflow-hidden bg-black/5" style="aspect-ratio: 16/9;">
+        {notempty name="$album.cover_thumb"}
+        <img src="{$album.cover_thumb}" alt="{$album.title}" class="w-full h-full object-cover blur-md scale-110">
+        {else /}
+        <img src="{$album.cover}" alt="{$album.title}" class="w-full h-full object-cover blur-md scale-110">
+        {/notempty}
+        <div class="absolute inset-0 flex flex-col items-center justify-center bg-black/55 text-white text-center px-6">
+            <svg class="w-10 h-10 mb-3 opacity-90" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z"/>
+            </svg>
+            <p class="text-base font-medium">该内容需要 V{$album.required_level} 会员</p>
+            <p class="text-xs opacity-80 mt-1">升级会员以查看完整图片 / 视频</p>
+            <a href="/user" class="mt-4 px-5 py-2 rounded-full bg-white text-[#1d1d1f] text-sm font-medium hover:opacity-90 transition">前往升级</a>
+        </div>
+    </div>
+    {else /}
     {if condition="$album.type eq 'video'"}
     <div class="mt-6">
         <div class="video-wrap rounded-xl overflow-hidden bg-black shadow-lg">
@@ -61,10 +78,12 @@
         <!-- 图片网格 -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
             <template x-for="(img, i) in images" :key="i">
-                <img :src="img[size]" loading="lazy" alt="{$album.title}"
-                     @click="open(i)"
-                     :class="i > 1 ? 'hidden md:block' : ''"
-                     class="w-full rounded-lg cursor-zoom-in bg-black/5">
+                <div :class="i > 1 ? 'hidden md:block' : ''" class="bg-black/5 rounded-lg overflow-hidden">
+                    <img :src="img[size]" loading="lazy" alt="{$album.title}"
+                         @click="open(i)"
+                         :class="imgCls"
+                         class="rounded-lg cursor-zoom-in block mx-auto">
+                </div>
             </template>
             <template x-if="images.length === 0">
                 <p class="text-sm text-[#86868b] py-4">暂无图片</p>
@@ -80,6 +99,7 @@
             <p class="lightbox-hint" x-text="sizeLabel"></p>
         </div>
     </div>
+    {/if}
     {/if}
 
     <!-- 评论区 -->
@@ -130,6 +150,12 @@ function imageViewer() {
         get sizeLabel() {
             const opt = this.sizes.find((s) => s.key === this.size);
             return opt ? opt.label : '';
+        },
+        get imgCls() {
+            if (this.size === 'url') {
+                return 'max-h-[80vh] w-auto max-w-full';
+            }
+            return 'w-full';
         },
         init() {
             try {

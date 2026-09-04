@@ -16,13 +16,11 @@ use think\db\Query;
 class ContentService
 {
     /**
-     * 用户可见内容的查询构造器（已发布 + 等级过滤 + 排序）
+     * 用户可见内容的查询构造器（仅按状态过滤；分级在 detailPayload 按需裁剪媒体 URL）
      */
     public static function visibleQuery(?User $user): Query
     {
-        $level = ContentAccessService::effectiveLevel($user);
         return Album::where('status', Album::STATUS_PUBLISHED)
-            ->where('level', '<=', $level)
             ->order('sort desc, id desc');
     }
 
@@ -105,10 +103,13 @@ class ContentService
 
     /**
      * 内容详情载荷（含媒体资源，供详情页/接口使用）
+     * 分级裁剪：无访问权时仅返回封面缩略图与 locked 标志，不返回原图/视频 URL
      */
-    public static function detailPayload(Album $album): array
+    public static function detailPayload(Album $album, ?User $user = null): array
     {
         $coverKey = (string) $album->cover;
+        $coverThumbKey = (string) ($album->cover_thumb ?? '');
+        $coverWebpKey = (string) ($album->cover_webp ?? '');
         $data = [
             'id'            => (int) $album->id,
             'title'         => (string) $album->title,
@@ -116,6 +117,8 @@ class ContentService
             'type'          => (string) $album->type,
             'type_label'    => self::typeLabel((string) $album->type),
             'cover'         => $coverKey !== '' ? StorageService::url($coverKey) : '',
+            'cover_thumb'   => $coverThumbKey !== '' ? StorageService::url($coverThumbKey) : '',
+            'cover_webp'    => $coverWebpKey !== '' ? StorageService::url($coverWebpKey) : '',
             'level'         => (int) $album->level,
             'view_count'    => (int) $album->view_count,
             'like_count'    => (int) $album->like_count,
@@ -129,12 +132,19 @@ class ContentService
             'video'         => null,
         ];
 
+        $canAccess = ContentAccessService::canAccess($user, $album);
+        $data['locked'] = !$canAccess;
+        $data['required_level'] = (int) $album->level;
+
         if ($album->type === Album::TYPE_VIDEO) {
             $video = $album->video;
             if ($video) {
                 $data['video'] = [
-                    'url'      => StorageService::url((string) $video->path),
-                    'poster'   => $video->poster ? StorageService::url((string) $video->poster) : $data['cover'],
+                    // 视频 URL 仅在有访问权时返回
+                    'url'      => $canAccess ? StorageService::url((string) $video->path) : '',
+                    // poster 始终返回（用于锁定时展示缩略图）
+                    'poster'   => $video->poster ? StorageService::url((string) $video->poster)
+                                : ($coverThumbKey !== '' ? $data['cover_thumb'] : $data['cover']),
                     'duration' => (int) $video->duration,
                     'width'    => (int) $video->width,
                     'height'   => (int) $video->height,
@@ -142,10 +152,11 @@ class ContentService
                 ];
             }
         } else {
-            $data['images'] = $album->images()->select()->map(static function (Image $img): array {
+            $data['images'] = $album->images()->select()->map(static function (Image $img) use ($canAccess): array {
                 $webp = $img->webp_path ?: $img->path;
                 return [
-                    'url'   => StorageService::url((string) $img->path),
+                    // 原图 URL 仅在有访问权时返回
+                    'url'   => $canAccess ? StorageService::url((string) $img->path) : '',
                     'webp'  => StorageService::url((string) $webp),
                     'thumb' => $img->thumb_path ? StorageService::url((string) $img->thumb_path) : '',
                     'width' => (int) $img->width,
@@ -157,16 +168,24 @@ class ContentService
     }
 
     /**
-     * 列表卡片载荷
+     * 列表卡片载荷（封面优先返回缩略图，避免列表页泄露原图）
      */
     public static function cardPayload(Album $album): array
     {
+        $coverThumbKey = (string) ($album->cover_thumb ?? '');
+        $coverWebpKey = (string) ($album->cover_webp ?? '');
+        $coverUrl = $album->cover ? StorageService::url((string) $album->cover) : '';
+        $coverThumbUrl = $coverThumbKey !== '' ? StorageService::url($coverThumbKey) : '';
+        $coverWebpUrl = $coverWebpKey !== '' ? StorageService::url($coverWebpKey) : '';
+        // 优先 thumb > webp > 原图（兜底）
+        $cover = $coverThumbUrl ?: ($coverWebpUrl ?: $coverUrl);
+
         return [
             'id'         => (int) $album->id,
             'title'      => (string) $album->title,
             'type'       => (string) $album->type,
             'type_label' => self::typeLabel((string) $album->type),
-            'cover'      => $album->cover ? StorageService::url((string) $album->cover) : '',
+            'cover'      => $cover,
             'level'      => (int) $album->level,
             'view_count' => (int) $album->view_count,
             'like_count' => (int) $album->like_count,
