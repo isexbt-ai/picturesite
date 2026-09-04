@@ -142,7 +142,7 @@ class User extends BaseController
             throw new BizException('用户不存在', 1704);
         }
 
-        Db::transaction(function () use ($id) {
+        Db::transaction(function () use ($id, $user) {
             Comment::where('user_id', $id)->delete();
             Favorite::where('user_id', $id)->delete();
             BrowseLog::where('user_id', $id)->delete();
