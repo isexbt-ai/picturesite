@@ -76,13 +76,13 @@
         </div>
 
         <!-- 图片网格 -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div :class="gridCls" class="grid gap-3">
             <template x-for="(img, i) in images" :key="i">
                 <div :class="i > 1 ? 'hidden md:block' : ''" class="bg-black/5 rounded-lg overflow-hidden">
                     <img :src="img[size]" loading="lazy" alt="{$album.title}"
                          @click="open(i)"
                          :class="imgCls"
-                         class="rounded-lg cursor-zoom-in block mx-auto">
+                         class="block mx-auto rounded-lg cursor-zoom-in">
                 </div>
             </template>
             <template x-if="images.length === 0">
@@ -152,10 +152,12 @@ function imageViewer() {
             return opt ? opt.label : '';
         },
         get imgCls() {
-            if (this.size === 'url') {
-                return 'max-h-[80vh] w-auto max-w-full';
-            }
-            return 'w-full';
+            if (this.size === 'thumb') return 'max-w-[200px] h-auto w-auto';
+            if (this.size === 'webp')  return 'w-full';
+            return 'w-full max-w-[960px]';
+        },
+        get gridCls() {
+            return this.size === 'url' ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2';
         },
         init() {
             try {

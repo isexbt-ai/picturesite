@@ -93,7 +93,19 @@ export interface UserItem {
   vip_level: number
   vip_expire_at: string | null
   status: number
+  invite_code_used: string | null
+  last_login_at: string | null
   create_time: string
+}
+
+export interface UserPayload {
+  id?: number
+  username?: string
+  password?: string
+  email?: string
+  vip_level?: number
+  status?: number
+  vip_expire_at?: string | null
 }
 
 export interface CommentItem {
@@ -204,6 +216,12 @@ export const grantVip = (data: { username: string; level: number; days: number; 
 // ---------- 用户 ----------
 export const getUsers = (params: Record<string, unknown>): Promise<ApiResponse<Paged<UserItem>>> =>
   request.get('/user/index', { params }) as Promise<ApiResponse<Paged<UserItem>>>
+
+export const saveUser = (payload: UserPayload): Promise<ApiResponse<null>> =>
+  request.post('/user/save', payload) as Promise<ApiResponse<null>>
+
+export const deleteUser = (id: number): Promise<ApiResponse<null>> =>
+  request.post(`/user/delete/id/${id}`) as Promise<ApiResponse<null>>
 
 // ---------- 邀请码 ----------
 export const getInviteCodes = (params: Record<string, unknown>): Promise<ApiResponse<Paged<InviteCode>>> =>
