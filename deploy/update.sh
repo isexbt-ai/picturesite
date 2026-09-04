@@ -33,20 +33,35 @@ else
     REMOTE="${REMOTE:-origin}"
 fi
 
-# 自动检测 PHP_BIN：宿主 PATH 优先，其次 docker 找挂载当前工作目录的 PHP 容器
+# 自动检测 PHP_BIN：宿主 PATH 优先；否则扫描 docker PHP 容器并提示用户覆盖
 if [ -z "${PHP_BIN:-}" ]; then
     if command -v php >/dev/null 2>&1; then
         PHP_BIN="$(command -v php)"
     elif command -v docker >/dev/null 2>&1; then
         PHP_CID=""
-        for cid in $(docker ps --format '{{.Names}}' 2>/dev/null | grep -i php); do
-            src=$(docker inspect --format '{{range .Mounts}}{{.Source}} {{.Destination}}{{println}}{{end}}' "$cid" 2>/dev/null)
-            if echo "$src" | grep -qF "$(realpath .) "; then
-                PHP_CID="$cid"
-                break
-            fi
+        CUR="$(realpath .)"
+        PROBE="$CUR"
+        while [ -z "$PHP_CID" ] && [ "$PROBE" != "/" ]; do
+            for cid in $(docker ps --format '{{.Names}}' 2>/dev/null | grep -i php); do
+                if docker inspect --format '{{range .Mounts}}{{.Source}}|{{end}}' "$cid" 2>/dev/null \
+                    | tr '|' '\n' | grep -qxF "$PROBE"; then
+                    PHP_CID="$cid"
+                    break
+                fi
+            done
+            PROBE="$(dirname "$PROBE")"
         done
         if [ -n "$PHP_CID" ]; then
+            # 容器内路径会因挂载点不同而异（不同 1Panel 版本映射各异），
+            # 让用户用 THINK_PATH 显式指定容器内 think 绝对路径
+            THINK_PATH="${THINK_PATH:-}"
+            if [ -z "$THINK_PATH" ]; then
+                yellow "检测到 PHP 容器 $PHP_CID（未安装宿主 php）。"
+                yellow "请指定容器内 think 绝对路径，例如："
+                yellow "  THINK_PATH=/www/sites/img/index/think PHP_BIN=\"docker exec $PHP_CID php\" $0"
+                yellow "或安装宿主机 php-cli。"
+                exit 1
+            fi
             PHP_BIN="docker exec $PHP_CID php"
         fi
     fi
@@ -109,10 +124,17 @@ fi
 blue "[3/5] 执行数据库迁移 ..."
 if [ ! -d database/migrations ]; then
     yellow "  ↳ 未找到 database/migrations，跳过"
+elif [ "${PHP_BIN%% *}" = "docker" ] && [ -z "${THINK_PATH:-}" ]; then
+    yellow "  ↳ 检测到 PHP_BIN=docker exec 但未设置 THINK_PATH，跳过迁移"
+    yellow "     用法: THINK_PATH=/www/sites/img/index/think PHP_BIN=\"docker exec X php\" $0"
 else
-    if "$PHP_BIN" think migrate:run 2>&1 | tee /tmp/tuzhan-migrate.log | grep -qE 'nothing to migrate|已是最新的|no migrations'; then
+    if [ "${PHP_BIN%% *}" = "docker" ]; then
+        $PHP_BIN "$THINK_PATH" migrate:run 2>&1 | tee /tmp/tuzhan-migrate.log
+    else
+        $PHP_BIN think migrate:run 2>&1 | tee /tmp/tuzhan-migrate.log
+    fi
+    if grep -qE 'nothing to migrate|已是最新的|no migrations' /tmp/tuzhan-migrate.log; then
         yellow "  ↳ 无新增迁移"
-        grep -v 'nothing to migrate' /tmp/tuzhan-migrate.log | sed 's/^/    /' || true
     else
         tail -n 20 /tmp/tuzhan-migrate.log | sed 's/^/    /'
         green "  ✓ 迁移完成"
