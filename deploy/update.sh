@@ -11,8 +11,9 @@
 #
 # 前置：
 #   1. 站点目录已是 git 仓库（remote = picturesite）
-#   2. 服务器已安装 composer（PHP 依赖变更时才需要）
-#   3. 服务器已安装 node + npm（后台前端变更时才需要）
+#   2. PHP：宿主机有 php 命令行；或 docker 可用（脚本自动找挂载当前工作目录的 PHP 容器）
+#   3. 服务器已安装 composer（PHP 依赖变更时才需要）
+#   4. 服务器已安装 node + npm（后台前端变更时才需要）
 #      若不便在服务器构建 Node，请保持本地构建后上传 public/admin/
 #
 # 安全：
@@ -24,8 +25,36 @@
 set -euo pipefail
 
 BRANCH="${BRANCH:-merge-nav}"
-REMOTE="${REMOTE:-origin}"
-PHP_BIN="${PHP_BIN:-$(command -v php 2>/dev/null || echo /usr/bin/php)}"
+
+# 自动检测唯一 remote 作为默认 REMOTE
+if [ "$(git remote 2>/dev/null | wc -l)" = "1" ]; then
+    REMOTE="${REMOTE:-$(git remote)}"
+else
+    REMOTE="${REMOTE:-origin}"
+fi
+
+# 自动检测 PHP_BIN：宿主 PATH 优先，其次 docker 找挂载当前工作目录的 PHP 容器
+if [ -z "${PHP_BIN:-}" ]; then
+    if command -v php >/dev/null 2>&1; then
+        PHP_BIN="$(command -v php)"
+    elif command -v docker >/dev/null 2>&1; then
+        PHP_CID=""
+        for cid in $(docker ps --format '{{.Names}}' 2>/dev/null | grep -i php); do
+            src=$(docker inspect --format '{{range .Mounts}}{{.Source}} {{.Destination}}{{println}}{{end}}' "$cid" 2>/dev/null)
+            if echo "$src" | grep -qF "$(realpath .) "; then
+                PHP_CID="$cid"
+                break
+            fi
+        done
+        if [ -n "$PHP_CID" ]; then
+            PHP_BIN="docker exec $PHP_CID php"
+        else
+            PHP_BIN="php"   # fallback，让后续步骤报错时给清晰提示
+        fi
+    else
+        PHP_BIN="php"
+    fi
+fi
 
 red()    { printf '\033[31m%s\033[0m\n' "$*" >&2; }
 green()  { printf '\033[32m%s\033[0m\n' "$*"; }
@@ -35,6 +64,10 @@ blue()   { printf '\033[34m%s\033[0m\n' "$*"; }
 # === 前置检查 ===
 [ -d .git ] || { red "当前目录不是 git 仓库，请在站点根目录执行"; exit 1; }
 command -v git >/dev/null || { red "未找到 git"; exit 1; }
+{ [ "${PHP_BIN%% *}" = "docker" ] && command -v docker >/dev/null; } || command -v "${PHP_BIN%% *}" >/dev/null 2>&1 || {
+    red "未找到 PHP 可执行（$PHP_BIN），请安装或通过 PHP_BIN=<docker exec X php> 指定"
+    exit 1
+}
 
 # === 1. 拉取代码 ===
 blue "[1/5] 拉取远程代码 ${REMOTE}/${BRANCH} ..."
@@ -78,7 +111,9 @@ fi
 
 # === 3. 数据库迁移 ===
 blue "[3/5] 执行数据库迁移 ..."
-if [ -d database/migrations ] && [ -x "$PHP_BIN" ] || command -v "$PHP_BIN" >/dev/null 2>&1; then
+if [ ! -d database/migrations ]; then
+    yellow "  ↳ 未找到 database/migrations，跳过"
+else
     if "$PHP_BIN" think migrate:run 2>&1 | tee /tmp/tuzhan-migrate.log | grep -qE 'nothing to migrate|已是最新的|no migrations'; then
         yellow "  ↳ 无新增迁移"
         grep -v 'nothing to migrate' /tmp/tuzhan-migrate.log | sed 's/^/    /' || true
@@ -86,8 +121,6 @@ if [ -d database/migrations ] && [ -x "$PHP_BIN" ] || command -v "$PHP_BIN" >/de
         tail -n 20 /tmp/tuzhan-migrate.log | sed 's/^/    /'
         green "  ✓ 迁移完成"
     fi
-else
-    yellow "  ↳ 未找到 database/migrations 或 php 可执行，跳过"
 fi
 
 # === 4. 后台前端构建 ===
