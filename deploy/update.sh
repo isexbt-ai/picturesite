@@ -145,14 +145,16 @@ fi
 blue "[4/5] 检查后台前端变更 ..."
 if [ -d admin-web ]; then
     if git diff --name-only "$LOCAL" "$REMOTE_COMMIT" | grep -qE '^admin-web/(src/|\.env|package.*\.json|vite\.config\.ts|index\.html)'; then
-        if command -v npm >/dev/null 2>&1; then
-            yellow "  ↳ 检测到后台前端变更，开始构建"
+        if git diff --name-only "$LOCAL" "$REMOTE_COMMIT" | grep -q '^public/admin/'; then
+            yellow "  ↳ 检测到后台源码 + public/admin/ 一起推送，复用已构建产物，跳过服务器构建"
+        elif command -v npm >/dev/null 2>&1; then
+            yellow "  ↳ 检测到后台前端变更但未推送产物，服务器开始构建"
             (cd admin-web && [ -d node_modules ] || npm install --no-audit --no-fund)
             (cd admin-web && npm run build)
             green "  ✓ 后台构建完成（产物 public/admin/）"
         else
-            red "  ✗ 检测到后台前端变更，但服务器无 npm。"
-            red "     请在本地构建 public/admin/ 后上传，或安装 Node.js。"
+            red "  ✗ 检测到后台前端源码变更，但服务器无 npm 且未推送 public/admin/ 产物。"
+            red "     请在本地构建 public/admin/ 后一起提交推送，或安装 Node.js。"
             exit 3
         fi
     else
