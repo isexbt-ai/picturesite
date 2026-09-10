@@ -253,3 +253,24 @@ export const saveSettings = (data: Record<string, string>): Promise<ApiResponse<
 // ---------- 统计 ----------
 export const getDashboard = (): Promise<ApiResponse<Stats>> =>
   request.get('/stats/dashboard') as Promise<ApiResponse<Stats>>
+
+// ---------- 友情链接 ----------
+export interface FriendLink {
+  id: number
+  name: string
+  url: string
+  sort: number
+  status: number
+}
+
+export const getFriendLinks = (): Promise<ApiResponse<FriendLink[]>> =>
+  request.get('/friend-link/index') as Promise<ApiResponse<FriendLink[]>>
+
+export const saveFriendLink = (data: Partial<FriendLink>): Promise<ApiResponse<{ id: number }>> =>
+  request.post('/friend-link/save', data) as Promise<ApiResponse<{ id: number }>>
+
+export const deleteFriendLink = (id: number): Promise<ApiResponse<null>> =>
+  request.post(`/friend-link/delete/id/${id}`) as Promise<ApiResponse<null>>
+
+export const toggleFriendLink = (id: number): Promise<ApiResponse<{ status: number }>> =>
+  request.post(`/friend-link/toggle/id/${id}`) as Promise<ApiResponse<{ status: number }>>

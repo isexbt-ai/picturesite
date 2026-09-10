@@ -13,6 +13,7 @@
         <el-menu-item index="/invite-codes">邀请码</el-menu-item>
         <el-menu-item index="/users">用户管理</el-menu-item>
         <el-menu-item index="/comments">评论审核</el-menu-item>
+        <el-menu-item index="/friend-links">友情链接</el-menu-item>
         <el-menu-item index="/settings">系统设置</el-menu-item>
       </el-menu>
     </el-aside>

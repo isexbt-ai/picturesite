@@ -11,7 +11,7 @@
     <link rel="stylesheet" href="/static/css/app.css">
 </head>
 <body class="bg-[#f5f5f7] text-[#1d1d1f] antialiased min-h-screen flex flex-col">
-    <header class="bg-white/80 backdrop-blur border-b border-black/5 sticky top-0 z-40">
+    <header class="bg-white/80 backdrop-blur border-b border-black/5 sticky top-0 z-40" x-data="{ mobileOpen: false }">
         <div class="max-w-7xl mx-auto px-4 h-14 flex items-center gap-6">
             <a href="/" class="font-semibold text-lg tracking-tight">图站</a>
             <nav class="hidden md:flex items-center gap-5 text-sm text-[#6e6e73]">
@@ -27,7 +27,7 @@
                 <input type="text" name="keyword" value="{$keyword|default=''}" placeholder="搜索内容"
                        class="w-40 md:w-56 bg-[#f5f5f7] border border-transparent rounded-full px-4 py-1.5 text-sm focus:outline-none focus:bg-white focus:border-[#0071e3] transition">
             </form>
-            <div class="flex items-center gap-3 text-sm">
+            <div class="hidden md:flex items-center gap-3 text-sm">
                 <button id="theme-toggle" @click="toggleTheme()" class="w-8 h-8 flex items-center justify-center text-[#6e6e73] hover:text-[#1d1d1f] dark:text-[#86868b] dark:hover:text-[#f5f5f7] transition" aria-label="切换深浅色模式" title="切换深浅色模式">
                     <svg id="icon-moon" xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
                     <svg id="icon-sun" xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
@@ -48,6 +48,46 @@
                 <a href="/login" class="hover:text-[#1d1d1f]">登录</a>
                 <a href="/register" class="px-4 py-1.5 rounded-full bg-[#0071e3] text-white hover:opacity-90 transition">注册</a>
                 {/notempty}
+            </div>
+            <button @click="mobileOpen = !mobileOpen" class="md:hidden w-8 h-8 flex items-center justify-center text-[#6e6e73]"
+                    aria-label="打开菜单" :aria-expanded="mobileOpen.toString()">
+                <svg x-show="!mobileOpen" xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/>
+                </svg>
+                <svg x-show="mobileOpen" x-cloak xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+
+        <div x-show="mobileOpen" x-cloak x-transition.opacity
+             @click.outside="mobileOpen = false"
+             class="md:hidden border-t border-black/5 bg-white">
+            <div class="max-w-7xl mx-auto px-4 py-3 flex flex-col gap-2 text-sm">
+                <a href="/" class="py-2 text-[#1d1d1f]">首页</a>
+                {notempty name="categories"}
+                {volist name="categories" id="c"}
+                <a href="/category/{$c.slug}" class="py-2 text-[#1d1d1f]">{$c.name}</a>
+                {/volist}
+                {/notempty}
+                <form action="/search" method="get" class="pt-2">
+                    <input type="text" name="keyword" value="{$keyword|default=''}" placeholder="搜索内容"
+                           class="w-full bg-[#f5f5f7] border border-transparent rounded-full px-4 py-2 text-sm focus:outline-none focus:bg-white focus:border-[#0071e3] transition">
+                </form>
+                <div class="border-t border-black/5 pt-2 flex flex-wrap items-center gap-3">
+                    <button @click="toggleTheme()" class="text-[#6e6e73] hover:text-[#1d1d1f]">切换主题</button>
+                    {notempty name="user"}
+                    <span class="text-[#6e6e73]">{$user.username}</span>
+                    <span class="text-xs px-2 py-0.5 rounded-full bg-[#0071e3]/10 text-[#0071e3]">
+                        {switch name="user.vip_level"}{case value="0"}免费{/case}{case value="1"}V1{/case}{case value="2"}V2{/case}{case value="3"}V3{/case}{/switch}
+                    </span>
+                    <a href="/user" class="text-[#1d1d1f]">个人中心</a>
+                    <button @click="logout()" class="text-[#6e6e73]">退出登录</button>
+                    {else /}
+                    <a href="/login" class="text-[#1d1d1f]">登录</a>
+                    <a href="/register" class="text-[#0071e3]">注册</a>
+                    {/notempty}
+                </div>
             </div>
         </div>
     </header>

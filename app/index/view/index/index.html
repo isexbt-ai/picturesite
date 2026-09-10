@@ -3,6 +3,20 @@
 {block name="description"}高清图片图集、单图与视频内容浏览{/block}
 {block name="content"}
 <div class="max-w-7xl mx-auto px-4 py-8">
+    {notempty name="friendLinks"}
+    <section class="mb-6 rounded-xl bg-white border border-black/5 px-4 py-3">
+        <div class="flex items-center gap-2 mb-2">
+            <span class="text-xs font-medium text-[#86868b]">友情链接</span>
+        </div>
+        <div class="flex flex-wrap gap-x-5 gap-y-2 text-sm">
+            {volist name="friendLinks" id="link"}
+            <a href="{$link.url}" target="_blank" rel="noopener noreferrer"
+               class="text-[#1d1d1f] hover:text-[#0071e3] transition">{$link.name}</a>
+            {/volist}
+        </div>
+    </section>
+    {/notempty}
+
     <h1 class="text-2xl font-semibold tracking-tight mb-6">最新内容</h1>
 
     {empty name="list.items"}

@@ -6,6 +6,7 @@ namespace app\index\controller;
 use app\BaseController;
 use app\common\middleware\AuthWall;
 use app\common\model\Category;
+use app\common\model\FriendLink;
 use app\common\service\ContentService;
 use think\response\View;
 
@@ -23,9 +24,10 @@ class Index extends BaseController
         $list = ContentService::paginateCards($user, $page, 12);
 
         return view('index/index', [
-            'user'       => $user,
-            'list'       => $list,
-            'categories' => Category::where('status', Category::STATUS_ENABLED)->order('sort asc, id asc')->select(),
+            'user'        => $user,
+            'list'        => $list,
+            'categories'  => Category::where('status', Category::STATUS_ENABLED)->order('sort asc, id asc')->select(),
+            'friendLinks' => FriendLink::where('status', FriendLink::STATUS_ENABLED)->order('sort asc, id asc')->limit(20)->select(),
         ]);
     }
 }

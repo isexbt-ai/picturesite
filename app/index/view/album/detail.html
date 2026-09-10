@@ -152,18 +152,19 @@ function imageViewer() {
             return opt ? opt.label : '';
         },
         get imgCls() {
-            if (this.size === 'thumb') return 'w-full';
-            if (this.size === 'webp')  return 'w-full';
+            if (this.size === 'thumb') return 'w-full h-32 md:h-40 object-cover';
+            if (this.size === 'webp')  return 'w-full max-h-[320px] object-contain bg-black/5';
             return 'w-full max-w-[960px] mx-auto';
         },
         get gridCls() {
             if (this.size === 'thumb') return 'grid-cols-3 md:grid-cols-5';
-            if (this.size === 'url')    return 'grid-cols-1';
-            return 'grid-cols-1 md:grid-cols-2';
+            if (this.size === 'webp')  return 'grid-cols-2 md:grid-cols-3';
+            return 'grid-cols-1';
         },
         cellHidden(i) {
-            // 小图模式全显示；中图/大图模式首屏 mobile 只显示前 2 张避免加载太多
-            return this.size === 'thumb' ? '' : (i > 1 ? 'hidden md:block' : '');
+            // 小图 / 大图模式全显示；中图模式首屏 mobile 只显示前 4 张避免加载太多
+            if (this.size === 'thumb' || this.size === 'url') return '';
+            return i > 3 ? 'hidden md:block' : '';
         },
         init() {
             try {

@@ -22,6 +22,7 @@ const router = createRouter({
         { path: 'invite-codes', component: () => import('../views/InviteCodeList.vue'), meta: { title: '邀请码' } },
         { path: 'users', component: () => import('../views/UserList.vue'), meta: { title: '用户管理' } },
         { path: 'comments', component: () => import('../views/CommentList.vue'), meta: { title: '评论审核' } },
+        { path: 'friend-links', component: () => import('../views/FriendLinkList.vue'), meta: { title: '友情链接' } },
         { path: 'settings', component: () => import('../views/SettingView.vue'), meta: { title: '系统设置' } },
       ],
     },
