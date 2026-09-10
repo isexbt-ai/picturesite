@@ -103,12 +103,12 @@ class ContentService
 
     /**
      * 内容详情载荷（含媒体资源，供详情页/接口使用）
-     * 分级裁剪：无访问权时仅返回封面 webp 与 locked 标志，不返回原图/视频 URL
+     * 分级裁剪：无访问权时仅返回封面缩略图与 locked 标志，不返回原图/视频 URL
      */
     public static function detailPayload(Album $album, ?User $user = null): array
     {
         $coverKey = (string) $album->cover;
-        $coverWebpKey = (string) ($album->cover_webp ?? '');
+        $coverThumbKey = (string) ($album->cover_thumb ?? '');
         $data = [
             'id'            => (int) $album->id,
             'title'         => (string) $album->title,
@@ -116,7 +116,7 @@ class ContentService
             'type'          => (string) $album->type,
             'type_label'    => self::typeLabel((string) $album->type),
             'cover'         => $coverKey !== '' ? StorageService::url($coverKey) : '',
-            'cover_webp'    => $coverWebpKey !== '' ? StorageService::url($coverWebpKey) : '',
+            'cover_thumb'   => $coverThumbKey !== '' ? StorageService::url($coverThumbKey) : '',
             'level'         => (int) $album->level,
             'view_count'    => (int) $album->view_count,
             'like_count'    => (int) $album->like_count,
@@ -142,7 +142,7 @@ class ContentService
                     'url'      => $canAccess ? StorageService::url((string) $video->path) : '',
                     // poster 始终返回（用于锁定时展示缩略图）
                     'poster'   => $video->poster ? StorageService::url((string) $video->poster)
-                                : ($coverWebpKey !== '' ? $data['cover_webp'] : $data['cover']),
+                                : ($coverThumbKey !== '' ? $data['cover_thumb'] : $data['cover']),
                     'duration' => (int) $video->duration,
                     'width'    => (int) $video->width,
                     'height'   => (int) $video->height,
@@ -151,11 +151,11 @@ class ContentService
             }
         } else {
             $data['images'] = $album->images()->select()->map(static function (Image $img) use ($canAccess): array {
-                $webp = $img->webp_path ?: $img->path;
+                $thumb = $img->thumb_path ?: $img->path;
                 return [
                     // 原图 URL 仅在有访问权时返回
                     'url'   => $canAccess ? StorageService::url((string) $img->path) : '',
-                    'webp'  => StorageService::url((string) $webp),
+                    'thumb' => StorageService::url((string) $thumb),
                     'width' => (int) $img->width,
                     'height' => (int) $img->height,
                 ];
@@ -165,15 +165,15 @@ class ContentService
     }
 
     /**
-     * 列表卡片载荷（封面优先返回 webp，避免列表页泄露原图）
+     * 列表卡片载荷（封面优先返回缩略图，避免列表页泄露原图）
      */
     public static function cardPayload(Album $album): array
     {
-        $coverWebpKey = (string) ($album->cover_webp ?? '');
+        $coverThumbKey = (string) ($album->cover_thumb ?? '');
         $coverUrl = $album->cover ? StorageService::url((string) $album->cover) : '';
-        $coverWebpUrl = $coverWebpKey !== '' ? StorageService::url($coverWebpKey) : '';
-        // 优先 webp > 原图（兜底）
-        $cover = $coverWebpUrl ?: $coverUrl;
+        $coverThumbUrl = $coverThumbKey !== '' ? StorageService::url($coverThumbKey) : '';
+        // 优先 thumb > 原图（兜底）
+        $cover = $coverThumbUrl ?: $coverUrl;
 
         return [
             'id'         => (int) $album->id,

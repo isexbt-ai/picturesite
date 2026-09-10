@@ -23,7 +23,7 @@ export interface AlbumItem {
   subtitle: string
   type: 'album' | 'single' | 'video'
   cover: string
-  cover_webp?: string
+  cover_thumb?: string
   level: number
   category_id: number
   status: number
@@ -39,7 +39,7 @@ export interface AlbumItem {
 
 export interface ImageItem {
   path: string
-  webp_path: string
+  thumb_path: string
   width: number
   height: number
   size: number
