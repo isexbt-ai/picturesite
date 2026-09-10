@@ -33,8 +33,8 @@
 
     {if condition="$album.locked"}
     <div class="mt-6 relative rounded-xl overflow-hidden bg-black/5" style="aspect-ratio: 16/9;">
-        {notempty name="$album.cover_thumb"}
-        <img src="{$album.cover_thumb}" alt="{$album.title}" class="w-full h-full object-cover blur-md scale-110">
+        {notempty name="$album.cover_webp"}
+        <img src="{$album.cover_webp}" alt="{$album.title}" class="w-full h-full object-cover blur-md scale-110">
         {else /}
         <img src="{$album.cover}" alt="{$album.title}" class="w-full h-full object-cover blur-md scale-110">
         {/notempty}
@@ -141,7 +141,6 @@ function imageViewer() {
         images: [],
         size: 'webp',
         sizes: [
-            { key: 'thumb', label: '小图' },
             { key: 'webp', label: '中图' },
             { key: 'url', label: '大图（原图）' },
         ],
@@ -152,18 +151,16 @@ function imageViewer() {
             return opt ? opt.label : '';
         },
         get imgCls() {
-            if (this.size === 'thumb') return 'w-full h-32 md:h-40 object-cover';
-            if (this.size === 'webp')  return 'w-full max-h-[320px] object-contain bg-black/5';
+            if (this.size === 'webp') return 'w-full max-h-[320px] object-contain bg-black/5';
             return 'w-full max-w-[960px] mx-auto';
         },
         get gridCls() {
-            if (this.size === 'thumb') return 'grid-cols-3 md:grid-cols-5';
-            if (this.size === 'webp')  return 'grid-cols-2 md:grid-cols-3';
+            if (this.size === 'webp') return 'grid-cols-2 md:grid-cols-3';
             return 'grid-cols-1';
         },
         cellHidden(i) {
-            // 小图 / 大图模式全显示；中图模式首屏 mobile 只显示前 4 张避免加载太多
-            if (this.size === 'thumb' || this.size === 'url') return '';
+            // 大图模式全显示；中图模式首屏 mobile 只显示前 4 张避免加载太多
+            if (this.size === 'url') return '';
             return i > 3 ? 'hidden md:block' : '';
         },
         init() {

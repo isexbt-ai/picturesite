@@ -4,23 +4,21 @@ declare(strict_types=1);
 namespace app\common\service;
 
 /**
- * 图片处理服务（GD 实现）：缩略图 + WebP
+ * 图片处理服务（GD 实现）：等比缩放生成 WebP 中图
  * 服务器无 Imagick 时 GD 兜底，本机 GD 已启用。
  */
 class ImageService
 {
-    /** 封面/缩略图宽度（列表页卡片用） */
-    public const THUMB_WIDTH = 400;
-    /** 列表图宽度（详情灯箱用） */
+    /** 列表/中图宽度（详情中档尺寸 + 列表封面统一使用） */
     public const LIST_WIDTH = 800;
 
     /**
-     * 处理图片：等比缩放生成缩略图(jpg)与 WebP，输出到指定目录
+     * 处理图片：等比缩放生成 WebP，输出到指定目录
      *
      * @param string $src      源图本地路径
      * @param string $destDir  输出目录（必须已存在或可创建）
      * @param int    $quality  WebP 质量 0-100
-     * @return array{thumb:string, webp:string} 生成的缩略图与 WebP 本地路径
+     * @return array{webp:string} 生成的 WebP 本地路径
      */
     public static function process(string $src, string $destDir, int $quality = 80): array
     {
@@ -40,20 +38,15 @@ class ImageService
             mkdir($destDir, 0755, true);
         }
         $base = $destDir . DIRECTORY_SEPARATOR . uniqid('img_', true);
-        $thumbPath = $base . '_thumb.jpg';
-        $webpPath  = $base . '_list.webp';
-
-        $thumb = self::scaleTo($image, self::THUMB_WIDTH, $srcW, $srcH);
-        imagejpeg($thumb, $thumbPath, (int) round($quality * 1.1));
+        $webpPath = $base . '_list.webp';
 
         $list = self::scaleTo($image, self::LIST_WIDTH, $srcW, $srcH);
         imagewebp($list, $webpPath, $quality);
 
         imagedestroy($image);
-        imagedestroy($thumb);
         imagedestroy($list);
 
-        return ['thumb' => $thumbPath, 'webp' => $webpPath];
+        return ['webp' => $webpPath];
     }
 
     /**

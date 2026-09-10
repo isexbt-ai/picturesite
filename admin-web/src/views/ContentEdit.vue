@@ -127,7 +127,6 @@ const form = reactive({
   category_id: 0,
   status: 1,
   cover: '',
-  cover_thumb: '',
   cover_webp: '',
   images: [] as ImageItem[],
   video: { path: '', poster: '', duration: 0, width: 0, height: 0, size: 0 },
@@ -136,7 +135,6 @@ const form = reactive({
 async function handleUploadCover(options: UploadRequestOptions): Promise<void> {
   const { data } = await uploadImage(options.file)
   form.cover = data.path
-  form.cover_thumb = data.thumb_path ?? ''
   form.cover_webp = data.webp_path ?? ''
   coverPreview.value = mediaUrl(data.path)
   ElMessage.success('封面上传成功')
@@ -182,7 +180,6 @@ async function loadAlbum(): Promise<void> {
   form.category_id = data.category_id
   form.status = data.status
   form.cover = data.cover
-  form.cover_thumb = data.cover_thumb ?? ''
   form.cover_webp = data.cover_webp ?? ''
   coverPreview.value = mediaUrl(data.cover)
   form.images = (data.images || []).map((img) => ({ ...img }))
@@ -206,7 +203,6 @@ async function handleSave(): Promise<void> {
       category_id: form.category_id,
       status: form.status,
       cover: form.cover,
-      cover_thumb: form.cover_thumb,
       cover_webp: form.cover_webp,
       tags: tagNames.value,
     }

@@ -17,9 +17,9 @@ class UploadService
     public const MAX_VIDEO = 500 * 1024 * 1024;
 
     /**
-     * 上传图片：原图 + 缩略图 + WebP 三份写入存储
+     * 上传图片：原图 + WebP 中图两份写入存储
      *
-     * @return array{path:string, thumb_path:string, webp_path:string, width:int, height:int, size:int}
+     * @return array{path:string, webp_path:string, width:int, height:int, size:int}
      */
     public static function uploadImage(UploadedFile $file, string $prefix = 'images'): array
     {
@@ -43,22 +43,18 @@ class UploadService
 
         $base = $prefix . '/' . date('Ym') . '/' . uniqid('', true);
         $origKey = $base . '.' . ($file->extension() ?: 'jpg');
-        $thumbKey = $base . '_thumb.jpg';
         $webpKey = $base . '_list.webp';
 
         try {
             StorageService::put($origKey, $src);
-            StorageService::put($thumbKey, $gen['thumb']);
             StorageService::put($webpKey, $gen['webp']);
         } finally {
             @unlink($src);
-            @unlink($gen['thumb']);
             @unlink($gen['webp']);
         }
 
         return [
             'path'       => $origKey,
-            'thumb_path' => $thumbKey,
             'webp_path'  => $webpKey,
             'width'      => (int) $width,
             'height'     => (int) $height,
