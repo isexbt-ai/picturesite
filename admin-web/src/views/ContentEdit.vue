@@ -168,7 +168,12 @@ function onImageFilesPicked(event: Event): void {
 async function uploadOne(file: File): Promise<void> {
   try {
     const res = await uploadImage(file, { skipErrorToast: true })
-    form.images.push({ ...res.data, sort: form.images.length + 1 })
+    // 后端 R2 SHA256 去重命中时返回的 path 与已有记录相同，
+    // 跳过 push 避免同一图集里出现重复图片（前台展示会重复）
+    const dup = form.images.some((img) => img.path === res.data.path)
+    if (!dup) {
+      form.images.push({ ...res.data, sort: form.images.length + 1 })
+    }
     uploadStats.done++
   } catch {
     uploadStats.failed++
