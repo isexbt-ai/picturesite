@@ -49,25 +49,37 @@
         <el-form-item label="封面">
           <div class="cover-wrap">
             <el-image v-if="coverPreview" :src="coverPreview" fit="cover" class="cover-preview" />
-            <el-upload :show-file-list="false" :http-request="handleUploadCover" accept="image/*">
-              <el-button type="primary" plain>{{ coverPreview ? '更换封面' : '上传封面' }}</el-button>
-            </el-upload>
+            <el-button type="primary" plain @click="pickCover">{{ coverPreview ? '更换封面' : '上传封面' }}</el-button>
           </div>
         </el-form-item>
 
         <!-- 图片内容：图集/单图 -->
         <template v-if="form.type !== 'video'">
           <el-form-item label="图片">
-            <el-upload :show-file-list="false" :http-request="handleUploadImage" accept="image/*" multiple>
-              <el-button type="success" plain>上传图片</el-button>
-            </el-upload>
+            <div class="flex items-center gap-3">
+              <el-button type="success" plain @click="pickImages">
+                <el-icon class="mr-1"><upload-filled /></el-icon>上传图片
+              </el-button>
+              <input ref="imageInput" type="file" multiple accept="image/*" hidden @change="onImageFilesPicked">
+            </div>
+            <div v-if="uploadStats.total > 0" class="upload-status">
+              <el-progress
+                :percentage="totalPct"
+                :stroke-width="14"
+                :show-text="true"
+                :status="uploadStats.failed > 0 ? 'warning' : ''" />
+              <p class="upload-meta">
+                共 {{ uploadStats.total }} 张 · 已完成 {{ uploadStats.done }} · 失败 {{ uploadStats.failed }}
+              </p>
+              <el-button v-if="failedFiles.length" size="small" type="warning" plain @click="retryFailed">
+                重试失败 ({{ failedFiles.length }})
+              </el-button>
+            </div>
           </el-form-item>
-          <el-form-item v-if="form.images.length" label="图片列表">
-            <div class="img-grid">
-              <div v-for="(img, i) in form.images" :key="i" class="img-item">
-                <el-image :src="mediaUrl(img.path)" fit="cover" class="img-preview" />
-                <el-button size="small" type="danger" class="img-remove" @click="removeImage(i)">删除</el-button>
-              </div>
+          <el-form-item v-if="form.images.length" label="图片数量">
+            <div class="flex items-center gap-3">
+              <span class="text-sm text-[#6e6e73]">已添加 {{ form.images.length }} 张</span>
+              <el-button size="small" type="danger" plain @click="clearImages">清空全部</el-button>
             </div>
           </el-form-item>
         </template>
@@ -75,15 +87,11 @@
         <!-- 视频内容 -->
         <template v-else>
           <el-form-item label="视频文件">
-            <el-upload :show-file-list="false" :http-request="handleUploadVideoFile" accept="video/mp4">
-              <el-button type="success" plain>上传 MP4</el-button>
-            </el-upload>
+            <el-button type="success" plain @click="pickVideoFile">上传 MP4</el-button>
             <span v-if="form.video.path" class="video-info">已上传：{{ form.video.path }}</span>
           </el-form-item>
           <el-form-item label="视频封面">
-            <el-upload :show-file-list="false" :http-request="handleUploadPoster" accept="image/*">
-              <el-button plain>上传封面图</el-button>
-            </el-upload>
+            <el-button plain @click="pickVideoPoster">上传封面图</el-button>
           </el-form-item>
           <el-form-item label="时长(秒)">
             <el-input-number v-model="form.video.duration" :min="0" />
@@ -102,7 +110,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import type { UploadRequestOptions } from 'element-plus'
+import { UploadFilled } from '@element-plus/icons-vue'
 import type { Category, ImageItem, Tag } from '../api'
 import { getAlbum, getCategories, getTags, saveAlbum, uploadImage, uploadVideo } from '../api'
 import { mediaUrl } from '../utils/media'
@@ -117,6 +125,16 @@ const categories = ref<Category[]>([])
 const tagOptions = ref<Tag[]>([])
 const tagNames = ref<string[]>([])
 const coverPreview = ref('')
+const imageInput = ref<HTMLInputElement | null>(null)
+
+// 上传并发池：最多 3 个同时进行，超出入队；进度/计数/失败重试用
+const UPLOAD_MAX_CONCURRENCY = 3
+const uploadPool = reactive({ active: 0, queue: [] as File[] })
+const uploadStats = reactive({ total: 0, done: 0, failed: 0 })
+const failedFiles = ref<File[]>([])
+const totalPct = computed(() =>
+  uploadStats.total > 0 ? Math.round((uploadStats.done / uploadStats.total) * 100) : 0,
+)
 
 const form = reactive({
   id: 0,
@@ -132,35 +150,110 @@ const form = reactive({
   video: { path: '', poster: '', duration: 0, width: 0, height: 0, size: 0 },
 })
 
-async function handleUploadCover(options: UploadRequestOptions): Promise<void> {
-  const { data } = await uploadImage(options.file)
+function pickImages(): void {
+  imageInput.value?.click()
+}
+
+function onImageFilesPicked(event: Event): void {
+  const input = event.target as HTMLInputElement
+  const files = input.files ? Array.from(input.files) : []
+  if (!files.length) return
+  uploadStats.total += files.length
+  uploadPool.queue.push(...files)
+  pump()
+  // 清空 input value 以允许再次选择同名文件
+  input.value = ''
+}
+
+async function uploadOne(file: File): Promise<void> {
+  try {
+    const res = await uploadImage(file, { skipErrorToast: true })
+    form.images.push({ ...res.data, sort: form.images.length + 1 })
+    uploadStats.done++
+  } catch {
+    uploadStats.failed++
+    failedFiles.value.push(file)
+  } finally {
+    uploadPool.active--
+    pump()
+  }
+}
+
+function pump(): void {
+  while (uploadPool.active < UPLOAD_MAX_CONCURRENCY && uploadPool.queue.length > 0) {
+    const next = uploadPool.queue.shift()
+    if (!next) break
+    uploadPool.active++
+    void uploadOne(next)
+  }
+}
+
+function retryFailed(): void {
+  if (!failedFiles.value.length) return
+  failedFiles.value.forEach((f) => {
+    uploadStats.total++
+    uploadPool.queue.push(f)
+  })
+  failedFiles.value = []
+  pump()
+}
+
+function clearImages(): void {
+  form.images = []
+}
+
+async function handleUploadCover(file: File): Promise<void> {
+  const { data } = await uploadImage(file)
   form.cover = data.path
   form.cover_thumb = data.thumb_path ?? ''
   coverPreview.value = mediaUrl(data.path)
   ElMessage.success('封面上传成功')
 }
 
-async function handleUploadImage(options: UploadRequestOptions): Promise<void> {
-  const { data } = await uploadImage(options.file)
-  form.images.push({ ...data, sort: form.images.length + 1 })
-  ElMessage.success('图片上传成功')
+function pickCover(): void {
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = 'image/*'
+  input.onchange = () => {
+    const file = input.files?.[0]
+    if (file) void handleUploadCover(file)
+  }
+  input.click()
 }
 
-function removeImage(index: number): void {
-  form.images.splice(index, 1)
-}
-
-async function handleUploadVideoFile(options: UploadRequestOptions): Promise<void> {
-  const { data } = await uploadVideo(options.file)
+async function handleUploadVideoFile(file: File): Promise<void> {
+  const { data } = await uploadVideo(file)
   form.video.path = data.path
   form.video.size = data.size
   ElMessage.success('视频上传成功')
 }
 
-async function handleUploadPoster(options: UploadRequestOptions): Promise<void> {
-  const { data } = await uploadImage(options.file)
+function pickVideoFile(): void {
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = 'video/mp4'
+  input.onchange = () => {
+    const file = input.files?.[0]
+    if (file) void handleUploadVideoFile(file)
+  }
+  input.click()
+}
+
+async function handleUploadPoster(file: File): Promise<void> {
+  const { data } = await uploadImage(file)
   form.video.poster = data.path
   ElMessage.success('视频封面上传成功')
+}
+
+function pickVideoPoster(): void {
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = 'image/*'
+  input.onchange = () => {
+    const file = input.files?.[0]
+    if (file) void handleUploadPoster(file)
+  }
+  input.click()
 }
 
 async function loadOptions(): Promise<void> {
@@ -243,24 +336,17 @@ onMounted(async () => {
   height: 128px;
   border-radius: 6px;
 }
-.img-grid {
+.upload-status {
   display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+  max-width: 520px;
 }
-.img-item {
-  position: relative;
-  width: 120px;
-}
-.img-preview {
-  width: 120px;
-  height: 160px;
-  border-radius: 6px;
-}
-.img-remove {
-  position: absolute;
-  top: 4px;
-  right: 4px;
+.upload-meta {
+  font-size: 13px;
+  color: #86868b;
+  margin: 0;
 }
 .video-info {
   margin-left: 12px;

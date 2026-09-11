@@ -178,10 +178,27 @@ export const saveAlbum = (data: Record<string, unknown>): Promise<ApiResponse<{ 
 export const deleteAlbum = (id: number): Promise<ApiResponse<null>> =>
   request.post(`/album/delete/id/${id}`) as Promise<ApiResponse<null>>
 
-export const uploadImage = (file: File): Promise<ApiResponse<ImageItem>> => {
+export interface UploadOptions {
+  /** 单文件上传进度回调（0-100），用于并发池 UI */
+  onProgress?: (pct: number) => void
+  /** 跳过响应拦截器内的全局 ElMessage 错误提示（并发场景调用方自行处理） */
+  skipErrorToast?: boolean
+}
+
+export const uploadImage = (
+  file: File,
+  opts: UploadOptions = {},
+): Promise<ApiResponse<ImageItem>> => {
   const form = new FormData()
   form.append('file', file)
-  return request.post('/upload/image', form) as Promise<ApiResponse<ImageItem>>
+  return request.post('/upload/image', form, {
+    skipErrorToast: opts.skipErrorToast,
+    onUploadProgress: (e) => {
+      if (opts.onProgress && e.total) {
+        opts.onProgress(Math.round((e.loaded * 100) / e.total))
+      }
+    },
+  }) as Promise<ApiResponse<ImageItem>>
 }
 
 export const uploadVideo = (file: File): Promise<ApiResponse<{ path: string; size: number }>> => {

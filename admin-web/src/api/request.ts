@@ -1,6 +1,13 @@
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
 
+/** 扩展 axios 配置：支持 skipErrorToast（并发上传场景用） */
+declare module 'axios' {
+  export interface AxiosRequestConfig {
+    skipErrorToast?: boolean
+  }
+}
+
 /** 统一响应结构 */
 export interface ApiResponse<T = unknown> {
   code: number
@@ -34,13 +41,16 @@ request.interceptors.response.use(
     return body as unknown as typeof response
   },
   (error) => {
-    const status: number | undefined = error.response?.status
-    if (status === 401) {
-      localStorage.removeItem('admin_token')
-      ElMessage.error('登录已过期，请重新登录')
-      window.location.href = '/admin/'
-    } else {
-      ElMessage.error(error.response?.data?.message || '网络错误，请稍后重试')
+    // 调用方设置 skipErrorToast 时跳过全局 toast（并发上传场景用，由调用方自己处理失败）
+    if (!error.config?.skipErrorToast) {
+      const status: number | undefined = error.response?.status
+      if (status === 401) {
+        localStorage.removeItem('admin_token')
+        ElMessage.error('登录已过期，请重新登录')
+        window.location.href = '/admin/'
+      } else {
+        ElMessage.error(error.response?.data?.message || '网络错误，请稍后重试')
+      }
     }
     return Promise.reject(error)
   },
