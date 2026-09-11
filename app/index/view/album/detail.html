@@ -77,10 +77,10 @@
 
         <!-- 图片网格 -->
         <div :class="gridCls" class="grid gap-3">
-            <template x-for="(img, i) in images" :key="i">
-                <div :class="cellHidden(i)" class="bg-black/5 rounded-lg overflow-hidden">
+            <template x-for="(img, i) in pageImages" :key="img._globalIdx">
+                <div class="bg-black/5 rounded-lg overflow-hidden">
                     <img :src="img[size]" loading="lazy" alt="{$album.title}"
-                         @click="open(i)"
+                         @click="open(img._globalIdx)"
                          :class="imgCls"
                          class="block mx-auto rounded-lg cursor-zoom-in">
                 </div>
@@ -88,6 +88,21 @@
             <template x-if="images.length === 0">
                 <p class="text-sm text-[#86868b] py-4">暂无图片</p>
             </template>
+        </div>
+
+        <!-- 翻页器 -->
+        <div class="flex items-center justify-center gap-3 mt-6 text-sm" x-show="images.length > pageSize">
+            <button type="button" @click="prevPage()" :disabled="page === 1"
+                    class="px-4 py-1.5 rounded-full border border-[#d2d2d7] disabled:opacity-40 hover:border-[#0071e3] hover:text-[#0071e3] transition">
+                ‹ 上一页
+            </button>
+            <span class="text-[#86868b]">
+                第 <span x-text="page"></span> / <span x-text="totalPages"></span> 页 · 共 <span x-text="images.length"></span> 张
+            </span>
+            <button type="button" @click="nextPage()" :disabled="page === totalPages"
+                    class="px-4 py-1.5 rounded-full border border-[#d2d2d7] disabled:opacity-40 hover:border-[#0071e3] hover:text-[#0071e3] transition">
+                下一页 ›
+            </button>
         </div>
 
         <!-- 灯箱 -->
@@ -144,6 +159,8 @@ function imageViewer() {
             { key: 'thumb', label: '小图' },
             { key: 'url', label: '大图（原图）' },
         ],
+        pageSize: 30,
+        page: 1,
         active: '',
         activeIdx: 0,
         get sizeLabel() {
@@ -158,10 +175,23 @@ function imageViewer() {
             if (this.size === 'thumb') return 'grid-cols-3 md:grid-cols-5';
             return 'grid-cols-1';
         },
-        cellHidden(i) {
-            // 小图 / 大图模式全显示
-            return '';
+        get totalPages() {
+            return Math.max(1, Math.ceil(this.images.length / this.pageSize));
         },
+        get pageImages() {
+            const start = (this.page - 1) * this.pageSize;
+            return this.images.slice(start, start + this.pageSize).map((img, i) => ({
+                ...img,
+                _globalIdx: start + i,
+            }));
+        },
+        goPage(p) {
+            this.page = Math.max(1, Math.min(this.totalPages, p));
+            this.active = '';
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        },
+        prevPage() { this.goPage(this.page - 1); },
+        nextPage() { this.goPage(this.page + 1); },
         init() {
             try {
                 const el = document.getElementById('album-images');
@@ -183,9 +213,9 @@ function imageViewer() {
                 this.active = this.images[this.activeIdx]?.[key] || '';
             }
         },
-        open(i) {
-            this.activeIdx = i;
-            this.active = this.images[i]?.[this.size] || '';
+        open(globalIdx) {
+            this.activeIdx = globalIdx;
+            this.active = this.images[globalIdx]?.[this.size] || '';
             document.body.style.overflow = 'hidden';
         },
         close() {

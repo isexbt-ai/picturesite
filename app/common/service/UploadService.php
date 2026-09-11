@@ -18,7 +18,9 @@ class UploadService
 
     /**
      * 上传图片：原图 + 缩略图(jpg)两份写入存储
+     * 按 SHA256 自动去重：同一文件二次上传直接复用 key，跳过 process 与 put
      *
+     * @param string $prefix 已废弃（路径统一为 images/by-hash/{xx}/{hash}.{ext}），保留仅为兼容调用方
      * @return array{path:string, thumb_path:string, width:int, height:int, size:int}
      */
     public static function uploadImage(UploadedFile $file, string $prefix = 'images'): array
@@ -38,12 +40,26 @@ class UploadService
         $width = $dim[0] ?? 0;
         $height = $dim[1] ?? 0;
 
+        // 按 SHA256 去重：原图与缩略图同 hash 前缀绑定命名，命中则跳过重传与缩略图生成
+        $hash = hash_file('sha256', $src);
+        $ext = strtolower((string) $file->extension()) ?: 'jpg';
+        $hashPrefix = substr($hash, 0, 2);
+        $origKey = "images/by-hash/{$hashPrefix}/{$hash}.{$ext}";
+        $thumbKey = "images/by-hash/{$hashPrefix}/{$hash}_thumb.jpg";
+
+        if (StorageService::exists($origKey)) {
+            @unlink($src);
+            return [
+                'path'       => $origKey,
+                'thumb_path' => $thumbKey,
+                'width'      => (int) $width,
+                'height'     => (int) $height,
+                'size'       => $size,
+            ];
+        }
+
         $outDir = runtime_path() . 'tmp';
         $gen = ImageService::process($src, $outDir);
-
-        $base = $prefix . '/' . date('Ym') . '/' . uniqid('', true);
-        $origKey = $base . '.' . ($file->extension() ?: 'jpg');
-        $thumbKey = $base . '_thumb.jpg';
 
         try {
             StorageService::put($origKey, $src);

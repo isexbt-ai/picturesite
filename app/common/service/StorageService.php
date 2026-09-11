@@ -49,6 +49,22 @@ class StorageService
     }
 
     /**
+     * 检查存储对象是否存在（R2 走 HeadObject，本地走 is_file）
+     * 用于上传去重：调用前确保 key 已通过 assertSafeKey
+     */
+    public static function exists(string $key): bool
+    {
+        self::assertSafeKey($key);
+        if (self::isR2()) {
+            return self::client()->doesObjectExist([
+                'Bucket' => (string) Config::get('r2.bucket'),
+                'Key'    => $key,
+            ]);
+        }
+        return is_file(public_path() . 'storage' . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $key));
+    }
+
+    /**
      * 当前是否使用 R2 驱动
      */
     public static function isR2(): bool
