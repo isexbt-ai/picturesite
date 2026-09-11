@@ -56,10 +56,17 @@ class StorageService
     {
         self::assertSafeKey($key);
         if (self::isR2()) {
-            return self::client()->doesObjectExist([
-                'Bucket' => (string) Config::get('r2.bucket'),
-                'Key'    => $key,
-            ]);
+            // aws-sdk-php 的 doesObjectExist 签名是 ($bucket, $key, array $options = [])，
+            // 不是数组形式，必须用两个位置参数
+            try {
+                return self::client()->doesObjectExist(
+                    (string) Config::get('r2.bucket'),
+                    $key,
+                );
+            } catch (\Throwable $e) {
+                Log::warning('R2 exists 检测失败', ['key' => $key, 'error' => $e->getMessage()]);
+                return false;
+            }
         }
         return is_file(public_path() . 'storage' . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $key));
     }
