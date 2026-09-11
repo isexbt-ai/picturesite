@@ -33,6 +33,11 @@ else
     REMOTE="${REMOTE:-origin}"
 fi
 
+red()    { printf '\033[31m%s\033[0m\n' "$*" >&2; }
+green()  { printf '\033[32m%s\033[0m\n' "$*"; }
+yellow() { printf '\033[33m%s\033[0m\n' "$*" >&2; }
+blue()   { printf '\033[34m%s\033[0m\n' "$*"; }
+
 # 自动检测 PHP_BIN：宿主 PATH 优先；否则扫描 docker PHP 容器并提示用户覆盖
 if [ -z "${PHP_BIN:-}" ]; then
     if command -v php >/dev/null 2>&1; then
@@ -66,11 +71,6 @@ if [ -z "${PHP_BIN:-}" ]; then
         fi
     fi
 fi
-
-red()    { printf '\033[31m%s\033[0m\n' "$*" >&2; }
-green()  { printf '\033[32m%s\033[0m\n' "$*"; }
-yellow() { printf '\033[33m%s\033[0m\n' "$*" >&2; }
-blue()   { printf '\033[34m%s\033[0m\n' "$*"; }
 
 # === 前置检查 ===
 [ -d .git ] || { red "当前目录不是 git 仓库，请在站点根目录执行"; exit 1; }
