@@ -25,6 +25,7 @@ class UploadService
      */
     public static function uploadImage(UploadedFile $file, string $prefix = 'images'): array
     {
+        // 先校验 mime 与体积，避免大文件落盘后再拒绝
         $mime = (string) $file->getMime();
         if (!in_array($mime, ['image/jpeg', 'image/png', 'image/webp', 'image/gif'], true)) {
             throw new BizException('仅支持 JPG/PNG/WebP/GIF 图片', 1301);
@@ -36,13 +37,31 @@ class UploadService
         $saved = self::saveTemp($file, 'up_');
         $src = $saved;
         $size = (int) filesize($src);
+
+        // 从文件内容读取宽高 + 真实类型；扩展名必须按内容推断，
+        // 不能用 $file->extension()（依赖客户端原始文件名，会因 .jpg/.jpeg 不一致导致 SHA256 去重失效）
         $dim = @getimagesize($src);
-        $width = $dim[0] ?? 0;
-        $height = $dim[1] ?? 0;
+        if ($dim === false) {
+            @unlink($src);
+            throw new BizException('无法识别的图片文件', 1301);
+        }
+        $width = (int) $dim[0];
+        $height = (int) $dim[1];
+        $imageType = (int) $dim[2];
+        $ext = match ($imageType) {
+            IMAGETYPE_JPEG => 'jpg',
+            IMAGETYPE_PNG  => 'png',
+            IMAGETYPE_GIF  => 'gif',
+            IMAGETYPE_WEBP => 'webp',
+            default        => null,
+        };
+        if ($ext === null) {
+            @unlink($src);
+            throw new BizException('仅支持 JPG/PNG/WebP/GIF 图片', 1301);
+        }
 
         // 按 SHA256 去重：原图与缩略图同 hash 前缀绑定命名，命中则跳过重传与缩略图生成
         $hash = hash_file('sha256', $src);
-        $ext = strtolower((string) $file->extension()) ?: 'jpg';
         $hashPrefix = substr($hash, 0, 2);
         $origKey = "images/by-hash/{$hashPrefix}/{$hash}.{$ext}";
         $thumbKey = "images/by-hash/{$hashPrefix}/{$hash}_thumb.jpg";
@@ -52,8 +71,8 @@ class UploadService
             return [
                 'path'       => $origKey,
                 'thumb_path' => $thumbKey,
-                'width'      => (int) $width,
-                'height'     => (int) $height,
+                'width'      => $width,
+                'height'     => $height,
                 'size'       => $size,
             ];
         }
@@ -72,8 +91,8 @@ class UploadService
         return [
             'path'       => $origKey,
             'thumb_path' => $thumbKey,
-            'width'      => (int) $width,
-            'height'     => (int) $height,
+            'width'      => $width,
+            'height'     => $height,
             'size'       => $size,
         ];
     }
