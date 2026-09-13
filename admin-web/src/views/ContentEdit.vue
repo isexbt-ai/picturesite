@@ -99,7 +99,16 @@
         </template>
 
         <el-form-item>
-          <el-button type="primary" :loading="saving" @click="handleSave">保存内容</el-button>
+          <el-button
+            type="primary"
+            :loading="saving"
+            :disabled="isUploading"
+            @click="handleSave">
+            {{ isUploading ? '上传中…' : '保存内容' }}
+          </el-button>
+          <span v-if="isUploading" class="text-xs text-[#86868b] ml-3">
+            上传未完成，请等待全部图片入库后再保存
+          </span>
         </el-form-item>
       </el-form>
     </el-card>
@@ -112,8 +121,18 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { UploadFilled } from '@element-plus/icons-vue'
 import type { Category, ImageItem, Tag } from '../api'
-import { getAlbum, getCategories, getTags, saveAlbum, uploadImage, uploadVideo } from '../api'
+import {
+  checkImageHashes,
+  createDraftAlbum,
+  getAlbum,
+  getCategories,
+  getTags,
+  saveAlbum,
+  uploadImage,
+  uploadVideo,
+} from '../api'
 import { mediaUrl } from '../utils/media'
+import { sha256, uuid } from '../utils/hash'
 
 const route = useRoute()
 const router = useRouter()
@@ -127,13 +146,24 @@ const tagNames = ref<string[]>([])
 const coverPreview = ref('')
 const imageInput = ref<HTMLInputElement | null>(null)
 
-// 上传并发池：最多 3 个同时进行，超出入队；进度/计数/失败重试用
-const UPLOAD_MAX_CONCURRENCY = 3
-const uploadPool = reactive({ active: 0, queue: [] as File[] })
+// 上传并发池：6 路同时进行；与 PHP-FPM worker 数（20+）留足余量
+const UPLOAD_MAX_CONCURRENCY = 6
+interface QueuedItem {
+  file: File
+  sha256: string
+  clientUuid: string
+}
+const uploadPool = reactive({ active: 0, queue: [] as QueuedItem[] })
 const uploadStats = reactive({ total: 0, done: 0, failed: 0 })
-const failedFiles = ref<File[]>([])
+const failedFiles = ref<QueuedItem[]>([])
 const totalPct = computed(() =>
   uploadStats.total > 0 ? Math.round((uploadStats.done / uploadStats.total) * 100) : 0,
+)
+/** 草稿 album 创建单飞：避免并发 onImageFilesPicked 各调一次 createDraftAlbum */
+let draftCreating: Promise<number> | null = null
+/** 上传中（含预检/draft 创建/并发池任务）：用于禁用「保存内容」按钮，避免增量同步删除未完成项 */
+const isUploading = computed(
+  () => uploadPool.active > 0 || uploadPool.queue.length > 0 || draftCreating !== null,
 )
 
 const form = reactive({
@@ -154,30 +184,123 @@ function pickImages(): void {
   imageInput.value?.click()
 }
 
-function onImageFilesPicked(event: Event): void {
+/**
+ * 确保有可用的草稿 album_id；首次上传时调用，并发场景单飞
+ */
+function ensureDraftAlbum(): Promise<number> {
+  if (form.id > 0) {
+    return Promise.resolve(form.id)
+  }
+  if (draftCreating) {
+    return draftCreating
+  }
+  draftCreating = createDraftAlbum(form.type)
+    .then((res) => {
+      form.id = res.data.id
+      return form.id
+    })
+    .catch((err) => {
+      draftCreating = null
+      throw err
+    })
+  return draftCreating
+}
+
+async function onImageFilesPicked(event: Event): Promise<void> {
   const input = event.target as HTMLInputElement
   const files = input.files ? Array.from(input.files) : []
   if (!files.length) return
+
+  // 视频类型不允许走图集上传
+  if (form.type === 'video') {
+    ElMessage.warning('视频内容请用上方「上传 MP4」')
+    input.value = ''
+    return
+  }
+
+  try {
+    await ensureDraftAlbum()
+  } catch {
+    ElMessage.error('初始化草稿失败，请重试')
+    input.value = ''
+    return
+  }
+
   uploadStats.total += files.length
-  uploadPool.queue.push(...files)
+
+  // 1) 并行算所有文件 SHA256（Web Crypto，纯本地）
+  const items: QueuedItem[] = await Promise.all(
+    files.map(async (file) => ({
+      file,
+      sha256: await sha256(file),
+      clientUuid: uuid(),
+    })),
+  )
+
+  // 2) 批量预检：DB 已有的直接复用，不上传
+  const hashes = items.map((i) => i.sha256)
+  try {
+    const { data } = await checkImageHashes(hashes)
+    const hitMap = data.hashes || {}
+    for (const item of items) {
+      const hit = hitMap[item.sha256]
+      if (hit && hit.path) {
+        pushImageIfNew({
+          id: hit.id,
+          path: hit.path,
+          thumb_path: hit.thumb_path ?? '',
+          width: hit.width ?? 0,
+          height: hit.height ?? 0,
+          size: hit.size ?? 0,
+          sort: form.images.length + 1,
+          sha256: hit.sha256 ?? item.sha256,
+          client_uuid: hit.client_uuid ?? item.clientUuid,
+        })
+        uploadStats.done++
+      } else {
+        uploadPool.queue.push(item)
+      }
+    }
+  } catch {
+    // 预检失败时全部走上传
+    uploadPool.queue.push(...items)
+  }
+
   pump()
-  // 清空 input value 以允许再次选择同名文件
   input.value = ''
 }
 
-async function uploadOne(file: File): Promise<void> {
+/**
+ * 推入 form.images（按 path 去重，避免前端重复导致 DB 重复入库）
+ */
+function pushImageIfNew(img: ImageItem): void {
+  if (form.images.some((x) => x.path === img.path)) return
+  form.images.push(img)
+}
+
+async function uploadOne(item: QueuedItem): Promise<void> {
   try {
-    const res = await uploadImage(file, { skipErrorToast: true })
-    // 后端 R2 SHA256 去重命中时返回的 path 与已有记录相同，
-    // 跳过 push 避免同一图集里出现重复图片（前台展示会重复）
-    const dup = form.images.some((img) => img.path === res.data.path)
-    if (!dup) {
-      form.images.push({ ...res.data, sort: form.images.length + 1 })
-    }
+    const res = await uploadImage(item.file, {
+      sha256: item.sha256,
+      client_uuid: item.clientUuid,
+      album_id: form.id,
+      skipErrorToast: true,
+    })
+    pushImageIfNew({
+      id: res.data.id,
+      path: res.data.path,
+      thumb_path: res.data.thumb_path ?? '',
+      width: res.data.width ?? 0,
+      height: res.data.height ?? 0,
+      size: res.data.size ?? 0,
+      sort: form.images.length + 1,
+      sha256: res.data.sha256 ?? item.sha256,
+      client_uuid: res.data.client_uuid ?? item.clientUuid,
+    })
     uploadStats.done++
   } catch {
     uploadStats.failed++
-    failedFiles.value.push(file)
+    failedFiles.value.push(item)
   } finally {
     uploadPool.active--
     pump()
@@ -307,9 +430,22 @@ async function handleSave(): Promise<void> {
     if (form.type === 'video') {
       payload.video = form.video
     } else {
-      payload.images = form.images.map((img, i) => ({ ...img, sort: i + 1 }))
+      // 保留 id/sha256/client_uuid 让后端做增量 UPDATE；新上传的项也有 client_uuid 可走增量模式
+      payload.images = form.images.map((img, i) => ({
+        id: img.id,
+        path: img.path,
+        thumb_path: img.thumb_path,
+        sha256: img.sha256,
+        client_uuid: img.client_uuid,
+        width: img.width,
+        height: img.height,
+        size: img.size,
+        sort: i + 1,
+      }))
     }
-    await saveAlbum(payload)
+    const { data } = await saveAlbum(payload)
+    // 新建场景下后端返回真实 id，前端同步（草稿场景下与 form.id 一致）
+    if (data.id) form.id = data.id
     ElMessage.success('保存成功')
     router.push('/contents')
   } finally {

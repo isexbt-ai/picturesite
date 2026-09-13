@@ -130,6 +130,24 @@ class Album extends BaseController
     }
 
     /**
+     * 创建空草稿（首张上传前调用），返回 id 供后续 uploadImage/albumId 使用
+     */
+    public function draft(): Json
+    {
+        $type = (string) ($this->request->post('type', 'album'));
+        if (!in_array($type, [AlbumModel::TYPE_ALBUM, AlbumModel::TYPE_SINGLE, AlbumModel::TYPE_VIDEO], true)) {
+            $type = AlbumModel::TYPE_ALBUM;
+        }
+        $album = AlbumModel::create([
+            'title'  => '未命名草稿',
+            'type'   => $type,
+            'status' => AlbumModel::STATUS_DRAFT,
+        ]);
+        AdminLogService::record((int) $this->request->currentAdmin->id, 'create_draft', (string) $album->id);
+        return json(['code' => 0, 'message' => 'ok', 'data' => ['id' => (int) $album->id]]);
+    }
+
+    /**
      * 删除内容（含关联记录与存储文件）
      */
     public function delete(int $id): Json
@@ -167,11 +185,28 @@ class Album extends BaseController
     /**
      * 同步图集图片（差集清理孤儿文件）
      *
-     * @param array $images [{path, thumb_path, width, height, size, sort}]
+     * - payload 含 client_uuid 时走增量模式：UPDATE sort + DELETE 取消项；不动 uuid 为空的遗留行
+     * - payload 无 client_uuid 时走遗留模式：delete-all + recreate（兼容旧数据）
+     *
+     * @param array $images [{id?, path, thumb_path, sha256?, client_uuid?, width, height, size, sort}]
      */
     private function syncImages(AlbumModel $album, array $images): void
     {
-        // 收集旧图集所有 key
+        // 检测是否走增量模式
+        $isIncremental = false;
+        foreach ($images as $img) {
+            if (!empty($img['client_uuid'])) {
+                $isIncremental = true;
+                break;
+            }
+        }
+
+        if ($isIncremental) {
+            $this->syncImagesIncremental($album, $images);
+            return;
+        }
+
+        // 遗留模式：删除旧记录 → 按新列表重建；同时收集新旧 key 差集清孤儿文件
         $oldKeys = [];
         foreach (ImageModel::where('album_id', (int) $album->id)->select() as $old) {
             foreach ([(string) $old->path, (string) ($old->thumb_path ?? '')] as $k) {
@@ -180,8 +215,6 @@ class Album extends BaseController
                 }
             }
         }
-
-        // 收集新图集所有 key
         $newKeys = [];
         foreach ($images as $img) {
             foreach ([(string) ($img['path'] ?? ''), (string) ($img['thumb_path'] ?? '')] as $k) {
@@ -190,11 +223,8 @@ class Album extends BaseController
                 }
             }
         }
-
-        // 孤儿 = 旧中存在但新中不再引用的 key
         $orphanKeys = array_keys(array_diff_key($oldKeys, $newKeys));
 
-        // 删除记录并重建
         ImageModel::where('album_id', (int) $album->id)->delete();
         $sort = 0;
         foreach ($images as $img) {
@@ -213,8 +243,53 @@ class Album extends BaseController
             ]);
         }
 
-        // 清理被替换/移除的孤儿文件
         $this->deleteMediaKeys($orphanKeys);
+    }
+
+    /**
+     * 增量同步：上传即入库后，save 只更新 sort 并清理取消项；不动遗留行（uuid 为空）
+     *
+     * @param array $images [{client_uuid, path, thumb_path, sha256?, width, height, size, sort}]
+     */
+    private function syncImagesIncremental(AlbumModel $album, array $images): void
+    {
+        $albumId = (int) $album->id;
+        $keptUuids = [];
+        $sort = 0;
+        foreach ($images as $img) {
+            $uuid = trim((string) ($img['client_uuid'] ?? ''));
+            if ($uuid === '') {
+                continue;
+            }
+            $sort++;
+            // 绑定到当前 album（覆盖 upload 时 album_id=0 的未归属行），并刷新 sort 与元数据
+            ImageModel::where('client_uuid', $uuid)
+                ->where('album_id', 'in', [0, $albumId])
+                ->update([
+                    'album_id'   => $albumId,
+                    'sort'       => (int) ($img['sort'] ?? $sort),
+                    'path'       => (string) ($img['path'] ?? ''),
+                    'thumb_path' => (string) ($img['thumb_path'] ?? ''),
+                    'sha256'     => (string) ($img['sha256'] ?? ''),
+                    'width'      => (int) ($img['width'] ?? 0),
+                    'height'     => (int) ($img['height'] ?? 0),
+                    'size'       => (int) ($img['size'] ?? 0),
+                ]);
+            $keptUuids[$uuid] = true;
+        }
+
+        // 删除该 album 下被取消的 uuid 行（不动 uuid 为空的遗留行）
+        if (!empty($keptUuids)) {
+            ImageModel::where('album_id', $albumId)
+                ->where('client_uuid', 'not in', array_keys($keptUuids))
+                ->where('client_uuid', '<>', '')
+                ->delete();
+        } else {
+            // 全量取消：清空该 album 所有有 uuid 的行
+            ImageModel::where('album_id', $albumId)
+                ->where('client_uuid', '<>', '')
+                ->delete();
+        }
     }
 
     /**

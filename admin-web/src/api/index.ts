@@ -38,12 +38,17 @@ export interface AlbumItem {
 }
 
 export interface ImageItem {
+  id?: number
   path: string
   thumb_path: string
   width: number
   height: number
   size: number
   sort: number
+  /** 后端 SHA256 内容哈希；预检去重与跨批次识别用 */
+  sha256?: string
+  /** 前端为每次上传生成的稳定 UUID；增量同步 sort 与删除用 */
+  client_uuid?: string
 }
 
 export interface VideoItem {
@@ -178,11 +183,21 @@ export const saveAlbum = (data: Record<string, unknown>): Promise<ApiResponse<{ 
 export const deleteAlbum = (id: number): Promise<ApiResponse<null>> =>
   request.post(`/album/delete/id/${id}`) as Promise<ApiResponse<null>>
 
+/** 创建空草稿 album（首张上传前调用），返回新 id */
+export const createDraftAlbum = (type: 'album' | 'single' | 'video' = 'album'): Promise<ApiResponse<{ id: number }>> =>
+  request.post('/album/draft', { type }) as Promise<ApiResponse<{ id: number }>>
+
 export interface UploadOptions {
   /** 单文件上传进度回调（0-100），用于并发池 UI */
   onProgress?: (pct: number) => void
   /** 跳过响应拦截器内的全局 ElMessage 错误提示（并发场景调用方自行处理） */
   skipErrorToast?: boolean
+  /** 客户端预计算的 SHA256（命中则服务端跳过 hash_file） */
+  sha256?: string
+  /** 前端为本次上传生成的稳定 UUID（媒体库上传场景必填，落 images 行） */
+  client_uuid?: string
+  /** 目标 album_id（媒体库上传必填，封面/海报场景留空） */
+  album_id?: number
 }
 
 export const uploadImage = (
@@ -191,6 +206,9 @@ export const uploadImage = (
 ): Promise<ApiResponse<ImageItem>> => {
   const form = new FormData()
   form.append('file', file)
+  if (opts.sha256) form.append('sha256', opts.sha256)
+  if (opts.client_uuid) form.append('client_uuid', opts.client_uuid)
+  if (opts.album_id && opts.album_id > 0) form.append('album_id', String(opts.album_id))
   return request.post('/upload/image', form, {
     skipErrorToast: opts.skipErrorToast,
     onUploadProgress: (e) => {
@@ -200,6 +218,12 @@ export const uploadImage = (
     },
   }) as Promise<ApiResponse<ImageItem>>
 }
+
+/** 批量预检 SHA256：返回 {hash: image row | null} map，命中即可跳过实际上传 */
+export const checkImageHashes = (
+  hashes: string[],
+): Promise<ApiResponse<{ hashes: Record<string, ImageItem | null> }>> =>
+  request.post('/upload/image/check', { hashes }) as Promise<ApiResponse<{ hashes: Record<string, ImageItem | null> }>>
 
 export const uploadVideo = (file: File): Promise<ApiResponse<{ path: string; size: number }>> => {
   const form = new FormData()
