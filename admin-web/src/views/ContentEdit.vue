@@ -56,12 +56,23 @@
         <!-- 图片内容：图集/单图 -->
         <template v-if="form.type !== 'video'">
           <el-form-item label="图片">
-            <div class="flex items-center gap-3">
+            <div class="flex items-center gap-3 flex-wrap">
               <el-button type="success" plain @click="pickImages">
                 <el-icon class="mr-1"><upload-filled /></el-icon>上传图片
               </el-button>
-              <input ref="imageInput" type="file" multiple accept="image/*" hidden @change="onImageFilesPicked">
+              <span v-if="form.images.length" class="text-sm text-[#6e6e73]">
+                已添加 {{ form.images.length }} 张
+              </span>
+              <el-button
+                v-if="form.images.length"
+                size="small"
+                type="danger"
+                plain
+                @click="confirmClearImages">
+                清空全部
+              </el-button>
             </div>
+            <input ref="imageInput" type="file" multiple accept="image/*" hidden @change="onImageFilesPicked">
             <div v-if="uploadStats.total > 0" class="upload-status">
               <el-progress
                 :percentage="totalPct"
@@ -75,11 +86,32 @@
                 重试失败 ({{ failedFiles.length }})
               </el-button>
             </div>
-          </el-form-item>
-          <el-form-item v-if="form.images.length" label="图片数量">
-            <div class="flex items-center gap-3">
-              <span class="text-sm text-[#6e6e73]">已添加 {{ form.images.length }} 张</span>
-              <el-button size="small" type="danger" plain @click="clearImages">清空全部</el-button>
+            <div v-if="form.images.length" class="image-grid-wrap">
+              <div
+                v-for="(img, idx) in form.images"
+                :key="img.path"
+                class="image-grid-item">
+                <el-image
+                  :src="mediaUrl(img.thumb_path || img.path)"
+                  fit="cover"
+                  lazy
+                  class="image-grid-thumb"
+                  :preview-src-list="[mediaUrl(img.path)]"
+                  :initial-index="0"
+                  hide-on-click-modal />
+                <div class="image-grid-overlay">
+                  <span class="image-grid-idx">#{{ idx + 1 }}</span>
+                  <el-button
+                    class="image-grid-del"
+                    type="danger"
+                    circle
+                    size="small"
+                    :title="`删除第 ${idx + 1} 张`"
+                    @click="removeImage(idx)">
+                    <el-icon><close /></el-icon>
+                  </el-button>
+                </div>
+              </div>
             </div>
           </el-form-item>
         </template>
@@ -118,8 +150,8 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import { UploadFilled } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { UploadFilled, Close } from '@element-plus/icons-vue'
 import type { Category, ImageItem, Tag } from '../api'
 import {
   checkImageHashes,
@@ -330,6 +362,33 @@ function clearImages(): void {
   form.images = []
 }
 
+/**
+ * 删除单张图片：仅在前端 form.images 中移除，未保存不入库；保存后由 syncImages 增量 DELETE 物理删除
+ */
+function removeImage(idx: number): void {
+  if (idx < 0 || idx >= form.images.length) return
+  form.images.splice(idx, 1)
+  ElMessage.success(`已移除第 ${idx + 1} 张`)
+}
+
+/**
+ * 清空全部二次确认：避免误操作丢失大量图片
+ */
+async function confirmClearImages(): Promise<void> {
+  if (!form.images.length) return
+  try {
+    await ElMessageBox.confirm(
+      `确定清空全部 ${form.images.length} 张图片？保存前可撤销。`,
+      '提示',
+      { type: 'warning', confirmButtonText: '清空', cancelButtonText: '取消' },
+    )
+  } catch {
+    return
+  }
+  clearImages()
+  ElMessage.success('已清空全部图片')
+}
+
 async function handleUploadCover(file: File): Promise<void> {
   const { data } = await uploadImage(file)
   form.cover = data.path
@@ -494,5 +553,65 @@ onMounted(async () => {
   color: #909399;
   font-size: 13px;
   word-break: break-all;
+}
+.image-grid-wrap {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+  max-height: 480px;
+  overflow-y: auto;
+  padding: 4px;
+  border: 1px solid #ebeef5;
+  border-radius: 4px;
+  background: #fafafa;
+}
+.image-grid-item {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  border-radius: 4px;
+  overflow: hidden;
+  background: #f0f0f0;
+  cursor: zoom-in;
+}
+.image-grid-thumb {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.image-grid-thumb :deep(img) {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.image-grid-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 4px;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.45) 0%, rgba(0, 0, 0, 0) 40%);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  pointer-events: none;
+}
+.image-grid-item:hover .image-grid-overlay {
+  opacity: 1;
+}
+.image-grid-idx {
+  font-size: 11px;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.55);
+  padding: 2px 6px;
+  border-radius: 8px;
+  line-height: 1.4;
+}
+.image-grid-del {
+  pointer-events: auto;
+  transform: scale(0.9);
+}
+.image-grid-item:hover .image-grid-del {
+  transform: scale(1);
 }
 </style>
